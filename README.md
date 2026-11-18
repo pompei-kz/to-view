@@ -1,0 +1,22 @@
+# to-view
+
+Минимальный Rust-плеер с FFmpeg и SDL2. Открывает локальный видеофайл и сразу запускает воспроизведение. Окно закрывается в конце видео. Пробел ставит на паузу, Esc закрывает окно.
+
+## Сборка на Debian или Ubuntu
+
+Установите Rust с Cargo и инструменты сборки с заголовками X11. В командах ниже перечислены пакеты для сборки. Если статические архивы X11 отсутствуют, на Debian и Ubuntu скрипт сборки может скачать и распаковать пакеты X11 в каталог Cargo без прав администратора.
+
+```sh
+sudo apt install build-essential binutils pkg-config curl xz-utils bzip2 patch \
+  libx11-dev libxext-dev libxcb1-dev libxau-dev libxdmcp-dev x11proto-dev xtrans-dev
+cargo build --release
+./target/release/to-view /path/to/video/file.mp4
+```
+
+При первой сборке Cargo загружает зафиксированные исходники FFmpeg, SDL2 и ALSA. Собранный бинарник включает эти библиотеки, клиент X11 и иконку. Для окна нужен доступный сервер X11 либо Xwayland. Для звука нужен доступ к устройству ALSA. Переменная `AUDIODEV` позволяет выбрать устройство, например `AUDIODEV=plughw:1,0`. Первая версия ориентирована на Linux с X11 и программным рендерингом.
+
+```sh
+readelf -l -d target/release/to-view
+```
+
+У статического файла отсутствуют заголовок `INTERP` и записи `NEEDED`. Для путей, начинающихся с дефиса, используйте `to-view -- -video.mp4`.
