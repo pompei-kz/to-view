@@ -2,7 +2,12 @@ mod player;
 
 use std::{env, ffi::OsString, path::PathBuf, process::ExitCode};
 
-const USAGE: &str = "Usage: to-view [--] <video-file>";
+const USAGE: &str = "Usage: to-view [OPTIONS] [--] <video-file>
+
+  --close-on-end=1, -j, -j1  Close the window at the end of playback
+  --close-on-end=0, -J, -j0  Keep the window open (default)
+  -h, --help                Show help
+  -V, --version             Show version";
 
 enum Command {
     Play(player::Options),
@@ -11,25 +16,47 @@ enum Command {
 }
 
 impl Command {
-    fn parse(mut args: impl Iterator<Item = OsString>) -> Result<Self, String> {
-        let first = args.next().ok_or("missing video file")?;
-        let command = match first.to_str() {
-            Some("-h" | "--help") => Self::Help,
-            Some("-V" | "--version") => Self::Version,
-            Some("--") => Self::Play(player::Options {
-                path: args.next().ok_or("missing video file after --")?.into(),
-            }),
-            _ if first.as_encoded_bytes().starts_with(b"-") => {
-                return Err(format!("unknown option {}", first.to_string_lossy()));
+    fn parse(args: impl Iterator<Item = OsString>) -> Result<Self, String> {
+        let mut path = None;
+        let mut close_on_end = false;
+        let mut parse_options = true;
+        for arg in args {
+            if parse_options {
+                match arg.to_str() {
+                    Some("-h" | "--help") => return Ok(Self::Help),
+                    Some("-V" | "--version") => return Ok(Self::Version),
+                    Some("--") => {
+                        parse_options = false;
+                        continue;
+                    }
+                    Some("--close-on-end=1" | "-j" | "-j1") => {
+                        close_on_end = true;
+                        continue;
+                    }
+                    Some("--close-on-end=0" | "-J" | "-j0") => {
+                        close_on_end = false;
+                        continue;
+                    }
+                    Some(option)
+                        if option == "--close-on-end" || option.starts_with("--close-on-end=") =>
+                    {
+                        return Err("--close-on-end requires =0 or =1".into());
+                    }
+                    _ if arg.as_encoded_bytes().starts_with(b"-") => {
+                        return Err(format!("unknown option {}", arg.to_string_lossy()));
+                    }
+                    _ => {}
+                }
             }
-            _ => Self::Play(player::Options {
-                path: PathBuf::from(first),
-            }),
-        };
-        if args.next().is_some() {
-            return Err("unexpected extra argument".into());
+            if path.is_some() {
+                return Err("unexpected extra argument".into());
+            }
+            path = Some(PathBuf::from(arg));
         }
-        Ok(command)
+        Ok(Self::Play(player::Options {
+            path: path.ok_or("missing video file")?,
+            close_on_end,
+        }))
     }
 }
 

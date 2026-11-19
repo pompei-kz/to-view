@@ -8,6 +8,7 @@ use std::{
 
 pub struct Options {
     pub path: PathBuf,
+    pub close_on_end: bool,
 }
 
 pub fn play(options: Options) -> Result<u8, String> {
@@ -17,16 +18,18 @@ pub fn play(options: Options) -> Result<u8, String> {
         return Err(format!("{}: expected a regular video file", path.display()));
     }
 
-    let mut args = [
+    let mut args = vec![
         b"to-view\0".to_vec(),
         b"-hide_banner\0".to_vec(),
         b"-loglevel\0".to_vec(),
         b"error\0".to_vec(),
-        b"-autoexit\0".to_vec(),
         b"-window_title\0".to_vec(),
         b"to-view\0".to_vec(),
-        [path.as_os_str().as_bytes(), b"\0"].concat(),
     ];
+    if options.close_on_end {
+        args.push(b"-autoexit\0".to_vec());
+    }
+    args.push([path.as_os_str().as_bytes(), b"\0"].concat());
     let mut argv: Vec<*mut c_char> = args.iter_mut().map(|arg| arg.as_mut_ptr().cast()).collect();
     argv.push(ptr::null_mut());
 
@@ -91,17 +94,29 @@ unsafe extern "C" fn __wrap_SDL_CreateWindow(
     unsafe {
         let window = __real_SDL_CreateWindow(title, x, y, w, h, flags);
         if !window.is_null() {
-            let source = SDL_RWFromConstMem(ICON.as_ptr().cast(), ICON.len() as c_int);
-            if !source.is_null() {
-                let icon = SDL_LoadBMP_RW(source, 1);
-                if !icon.is_null() {
-                    SDL_SetWindowIcon(window, icon);
-                    SDL_FreeSurface(icon);
-                }
+            let icon = load_bmp(ICON);
+            if !icon.is_null() {
+                SDL_SetWindowIcon(window, icon);
+                SDL_FreeSurface(icon);
             }
         }
         window
     }
+}
+
+fn load_bmp(bytes: &'static [u8]) -> *mut Surface {
+    unsafe {
+        let source = SDL_RWFromConstMem(bytes.as_ptr().cast(), bytes.len() as c_int);
+        if source.is_null() {
+            return ptr::null_mut();
+        }
+        SDL_LoadBMP_RW(source, 1)
+    }
+}
+
+#[unsafe(no_mangle)]
+extern "C" fn to_view_load_menu_label() -> *mut Surface {
+    load_bmp(include_bytes!("../assets/menu-label.bmp"))
 }
 
 // ALSA can try the host's default PCM first. The embedded fallback can use
