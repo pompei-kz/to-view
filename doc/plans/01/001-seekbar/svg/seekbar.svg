@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 450" role="img" aria-labelledby="title description">
+  <title id="title">Полоса прокрутки в режиме меню</title>
+  <desc id="description">Внизу кадра прозрачный трек на всю ширину. Сплошная метка показывает текущую позицию, штриховая — цель под курсором. Слева показано текущее время и цель, справа — полная длительность. Белые контуры с тёмной обводкой видны на светлых и тёмных участках кадра.</desc>
+  <defs>
+    <g id="outlines" fill="none">
+      <rect x="2" y="416" width="796" height="32"/>
+      <path d="M334 416v32"/>
+    </g>
+    <path id="preview" d="M532 416v32" fill="none"/>
+  </defs>
+
+  <!-- Sample frame with light and dark areas behind the transparent controls. -->
+  <path fill="#d5e9f1" d="M0 0h800v450H0z"/>
+  <circle cx="625" cy="107" r="50" fill="#fff4c5"/>
+  <path fill="#92b5c3" d="M0 244 170 102 303 220 500 96 800 265v185H0z"/>
+  <path fill="#476772" d="M0 314 227 182 418 327 590 236 800 335v115H0z"/>
+  <path fill="#243d48" d="M0 392 148 327 312 406 468 328 660 414 800 352v98H0z"/>
+  <path fill="#d2e1e3" d="M0 0h108l63 450H0z" opacity=".38"/>
+
+  <use href="#outlines" stroke="#101820" stroke-width="4"/>
+  <use href="#outlines" stroke="#fff" stroke-width="1.5"/>
+  <use href="#preview" stroke="#101820" stroke-width="4" stroke-dasharray="4 4"/>
+  <use href="#preview" stroke="#fff" stroke-width="1.5" stroke-dasharray="4 4"/>
+  <g fill="#fff" stroke="#101820" stroke-width="2.8" paint-order="stroke fill"
+     stroke-linejoin="round" font-family="DejaVu Sans, sans-serif" font-size="17">
+    <text x="13" y="29">Esc - выход из режима меню</text>
+    <text x="13" y="52">Q - выход</text>
+    <text x="13" y="438">01:15.0 -&gt; 02:00.0</text>
+    <text x="784" y="438" text-anchor="end">03:00.0</text>
+  </g>
+</svg>
