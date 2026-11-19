@@ -2,6 +2,7 @@ use super::{ffi::*, media};
 use crate::window_geometry::Geometry;
 use std::{
   ffi::CStr,
+  path::PathBuf,
   ptr,
   time::{Duration, Instant},
 };
@@ -77,13 +78,14 @@ pub struct Ui {
   video: *mut SDL_Texture,
   video_size: (i32, i32),
   geometry: Geometry,
+  media_path: PathBuf,
+  default_size_pending: bool,
   geometry_changed_at: Option<Instant>,
-  saved_size: bool,
   visible: bool,
 }
 
 impl Ui {
-  pub fn new(geometry: Geometry) -> Result<Self, String> {
+  pub fn new(geometry: Geometry, media_path: PathBuf) -> Result<Self, String> {
     unsafe {
       if SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0 {
         return Err(error());
@@ -134,20 +136,68 @@ impl Ui {
         video: ptr::null_mut(),
         video_size: (0, 0),
         geometry,
+        media_path,
+        default_size_pending: geometry.size.is_none(),
         geometry_changed_at: None,
-        saved_size: geometry.size.is_some(),
         visible: false,
       })
     }
   }
 
   pub fn show(&mut self, size: Option<(i32, i32)>) {
-    if self.visible {
-      return;
-    }
     unsafe {
-      if let Some((w, h)) = size.filter(|_| !self.saved_size) {
-        SDL_SetWindowSize(self.window, w, h);
+      if self.default_size_pending
+        && let Some((video_width, video_height)) = size
+      {
+        let (mut mouse_x, mut mouse_y) = (0, 0);
+        SDL_GetGlobalMouseState(&mut mouse_x, &mut mouse_y);
+        let mut bounds = Rect {
+          x: 0,
+          y: 0,
+          w: 0,
+          h: 0,
+        };
+        let mut selected = SDL_GetWindowDisplayIndex(self.window).max(0);
+        for index in 0..SDL_GetNumVideoDisplays() {
+          let mut display = Rect {
+            x: 0,
+            y: 0,
+            w: 0,
+            h: 0,
+          };
+          if SDL_GetDisplayBounds(index, &mut display) == 0
+            && mouse_x >= display.x
+            && mouse_y >= display.y
+            && i64::from(mouse_x) < i64::from(display.x) + i64::from(display.w)
+            && i64::from(mouse_y) < i64::from(display.y) + i64::from(display.h)
+          {
+            selected = index;
+            break;
+          }
+        }
+        if SDL_GetDisplayUsableBounds(selected, &mut bounds) != 0 {
+          SDL_GetDisplayBounds(selected, &mut bounds);
+        }
+        if bounds.w > 0 && bounds.h > 0 && video_width > 0 && video_height > 0 {
+          let max_w = (bounds.w * 3 / 4).max(1);
+          let max_h = (bounds.h * 3 / 4).max(1);
+          let scale = (f64::from(max_w) / f64::from(video_width))
+            .min(f64::from(max_h) / f64::from(video_height));
+          let w = (f64::from(video_width) * scale).round().max(1.0) as i32;
+          let h = (f64::from(video_height) * scale).round().max(1.0) as i32;
+          SDL_SetWindowSize(self.window, w, h);
+          if self.geometry.position.is_none() {
+            SDL_SetWindowPosition(
+              self.window,
+              bounds.x + (bounds.w - w) / 2,
+              bounds.y + (bounds.h - h) / 2,
+            );
+          }
+        }
+        self.default_size_pending = false;
+      }
+      if self.visible {
+        return;
       }
       SDL_ShowWindow(self.window);
     }
@@ -191,7 +241,7 @@ impl Ui {
       .is_some_and(|changed| changed.elapsed() >= Duration::from_millis(300))
     {
       self.geometry_changed_at = None;
-      self.geometry.save();
+      self.geometry.save(&self.media_path);
     }
   }
 

@@ -10,7 +10,7 @@ The Left and Right arrow keys seek by 1 second. Hold Shift to seek by 5 seconds 
 
 By default, the window stays open on the last frame. Use `--close-on-end=1`, `-j`, or `-j1` to close it automatically. Use `--close-on-end=0`, `-J`, or `-j0` to keep it open.
 
-The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/to-view/saves/window/position.txt` and `~/.config/to-view/saves/window/size.txt`.
+The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/to-view/saves/<sha256>/window/position.txt` and `size.txt`. The hash is SHA-256 of the canonical absolute file path. New files open centered on the monitor containing the pointer, fitted within three quarters of its usable width and height while preserving the video aspect ratio.
 
 ## Building on Debian or Ubuntu
 

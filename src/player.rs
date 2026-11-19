@@ -35,7 +35,7 @@ pub fn play(options: Options) -> Result<u8, String> {
     return Err(format!("{}: expected a regular video file", path.display()));
   }
   let input = CString::new(path.as_os_str().as_bytes()).map_err(|_| "invalid file path")?;
-  let mut ui = sdl::Ui::new(Geometry::load())?;
+  let mut ui = sdl::Ui::new(Geometry::load(&path), path.clone())?;
   let (event_tx, event_rx) = mpsc::sync_channel(4);
   let (seek_tx, seek_rx) = mpsc::channel();
   let requested = Arc::new(AtomicU64::new(0));

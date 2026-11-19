@@ -1,17 +1,20 @@
+use sha2::{Digest, Sha256};
 use std::{
   env,
   fs::{self, OpenOptions},
   io::{self, Write},
+  os::unix::ffi::OsStrExt,
   path::{Path, PathBuf},
   process,
   time::{SystemTime, UNIX_EPOCH},
 };
 
-fn directory() -> Option<PathBuf> {
+fn directory(path: &Path) -> Option<PathBuf> {
   let home = PathBuf::from(env::var_os("HOME")?);
+  let hash = format!("{:x}", Sha256::digest(path.as_os_str().as_bytes()));
   home
     .is_absolute()
-    .then(|| home.join(".config/to-view/saves/window"))
+    .then(|| home.join(".config/to-view/saves").join(hash).join("window"))
 }
 
 fn read_pair(path: &Path) -> Option<(i32, i32)> {
@@ -29,8 +32,8 @@ pub struct Geometry {
 }
 
 impl Geometry {
-  pub fn load() -> Self {
-    let Some(dir) = directory() else {
+  pub fn load(path: &Path) -> Self {
+    let Some(dir) = directory(path) else {
       return Self::default();
     };
     Self {
@@ -39,8 +42,8 @@ impl Geometry {
     }
   }
 
-  pub fn save(self) {
-    let Some(dir) = directory() else { return };
+  pub fn save(self, path: &Path) {
+    let Some(dir) = directory(path) else { return };
     if let Err(error) = fs::create_dir_all(&dir) {
       eprintln!("to-view: could not create {}: {error}", dir.display());
       return;
