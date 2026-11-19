@@ -26,6 +26,7 @@ pub enum Target {
   Time(i64),
   First,
   Last,
+  Frame { current: i64, forward: bool },
 }
 
 #[derive(Clone, Copy)]
@@ -53,6 +54,7 @@ pub struct Metadata {
 }
 
 pub struct Video {
+  pub number: u64,
   pub pts: i64,
   pub duration: i64,
   pub width: i32,
@@ -176,34 +178,18 @@ impl Input {
     }
   }
 
-  fn seek(&mut self, seek: Seek, start: i64, end_hint: Option<i64>) -> Result<bool, String> {
-    self.interrupt.active = seek.generation;
+  fn seek(&mut self, generation: u64, start: i64) -> Result<(), String> {
+    self.interrupt.active = generation;
     unsafe {
       let raw = self.raw.as_ptr();
-      if (*(*raw).iformat).flags & AVFMT_TS_DISCONT as i32 != 0 {
-        check(
-          av_seek_frame(raw, -1, 0, AVSEEK_FLAG_BYTE as i32),
-          "seek input",
-        )?;
-        return Ok(false);
-      }
-
-      if matches!(seek.target, Target::Last)
-        && let Some(timestamp) = end_hint.filter(|timestamp| *timestamp > start)
-        && avformat_seek_file(raw, -1, i64::MIN, timestamp, timestamp, 0) >= 0
-      {
-        return Ok(true);
-      }
-      let timestamp = match seek.target {
-        Target::Time(position) => start.saturating_add(position),
-        Target::First | Target::Last => start,
+      let result = if (*(*raw).iformat).flags & AVFMT_TS_DISCONT as i32 != 0 {
+        av_seek_frame(raw, -1, 0, AVSEEK_FLAG_BYTE as i32)
+      } else {
+        avformat_seek_file(raw, -1, i64::MIN, start, start, 0)
       };
-      check(
-        avformat_seek_file(raw, -1, i64::MIN, timestamp, timestamp, 0),
-        "seek input",
-      )?;
+      check(result, "seek input")?;
     }
-    Ok(false)
+    Ok(())
   }
 }
 
@@ -325,7 +311,13 @@ struct ConvertVideo {
 }
 
 impl ConvertVideo {
-  fn frame(&mut self, frame: &AVFrame, pts: i64, duration: i64) -> Result<Video, String> {
+  fn frame(
+    &mut self,
+    frame: &AVFrame,
+    pts: i64,
+    duration: i64,
+    number: u64,
+  ) -> Result<Video, String> {
     let (width, height) = (frame.width, frame.height);
     if !(1..=8192).contains(&width) || !(1..=8192).contains(&height) {
       return Err(format!("unsupported video size {width}x{height}"));
@@ -375,6 +367,7 @@ impl ConvertVideo {
       )?;
     }
     Ok(Video {
+      number,
       pts,
       duration,
       width,
@@ -525,6 +518,7 @@ struct Output {
   start: i64,
   target: Target,
   last_video_pts: Option<i64>,
+  frame_number: u64,
   video_interval: i64,
   next_video: i64,
   next_audio: i64,
@@ -538,6 +532,7 @@ impl Output {
       start,
       target: Target::Time(0),
       last_video_pts: None,
+      frame_number: 0,
       video_interval,
       next_video: 0,
       next_audio: 0,
@@ -548,6 +543,7 @@ impl Output {
     self.audio.reset();
     self.target = target;
     self.last_video_pts = None;
+    self.frame_number = 0;
     self.next_video = 0;
     self.next_audio = 0;
   }
@@ -567,6 +563,7 @@ impl Output {
       .filter(|d| *d > 0)
       .unwrap_or(self.video_interval);
     self.next_video = pts.saturating_add(duration);
+    self.frame_number = self.frame_number.saturating_add(1);
     if matches!(self.target, Target::Last) {
       self.last_video_pts = Some(pts);
       // Decode through EOF and only convert the last frame. Retain the decoded reference.
@@ -577,7 +574,9 @@ impl Output {
         return Ok(());
       }
     }
-    let video = self.video.frame(frame, pts.max(0), duration)?;
+    let video = self
+      .video
+      .frame(frame, pts.max(0), duration, self.frame_number)?;
     publisher.send(Event::Video(video));
     Ok(())
   }
@@ -618,7 +617,6 @@ struct Media {
   last: Frame,
   output: Output,
   metadata: Metadata,
-  last_from_hint: bool,
 }
 
 impl Media {
@@ -660,7 +658,6 @@ impl Media {
       last: Frame::new()?,
       output: Output::new(start, interval),
       metadata,
-      last_from_hint: false,
     })
   }
 
@@ -692,18 +689,71 @@ impl Media {
     Ok(())
   }
 
-  fn seek(&mut self, seek: Seek, allow_hint: bool) -> Result<(), String> {
-    let end_hint = if allow_hint && matches!(seek.target, Target::Last) {
-      self.video.as_ref().and_then(|decoder| {
-        let stream = unsafe { &**self.input.raw.as_ref().streams.add(decoder.index as usize) };
-        let start = time(stream.start_time, stream.time_base).unwrap_or(self.output.start);
-        let duration = time(stream.duration, stream.time_base).filter(|v| *v > 0)?;
-        Some(start.saturating_add(duration).saturating_sub(1))
-      })
-    } else {
-      None
+  fn frame_target(&mut self, seek: Seek, current: i64, forward: bool) -> Result<i64, String> {
+    self.input.seek(seek.generation, self.output.start)?;
+    let Some(video) = &mut self.video else {
+      return Ok(current);
     };
-    self.last_from_hint = self.input.seek(seek, self.output.start, end_hint)?;
+    video.flush();
+    let mut previous = None;
+    let selected = std::cell::Cell::new(None);
+    let mut next_pts = 0;
+    let packet = self.packet.0.as_ptr();
+    let mut scan = |frame: &AVFrame, base: AVRational| -> Result<(), String> {
+      let pts = time(frame.best_effort_timestamp, base)
+        .map_or(next_pts, |value| value.saturating_sub(self.output.start));
+      next_pts = pts.saturating_add(
+        time(frame.duration, base)
+          .filter(|d| *d > 0)
+          .unwrap_or(self.output.video_interval),
+      );
+      if selected.get().is_none() {
+        if forward && pts > current {
+          selected.set(Some(pts));
+        } else if !forward && pts >= current {
+          selected.set(Some(previous.unwrap_or(pts)));
+        } else if pts < current {
+          previous = Some(pts);
+        }
+      }
+      Ok(())
+    };
+    while selected.get().is_none()
+      && self.input.interrupt.requested.load(Ordering::Acquire) == seek.generation
+    {
+      let result = unsafe { av_read_frame(self.input.raw.as_ptr(), packet) };
+      if result == EOF {
+        video.decode(ptr::null(), &mut scan)?;
+        break;
+      }
+      check(result, "read frames for stepping")?;
+      let result = if unsafe { (*packet).stream_index } == video.index {
+        video.decode(packet, &mut scan)
+      } else {
+        Ok(())
+      };
+      unsafe { av_packet_unref(packet) };
+      result?;
+    }
+    Ok(
+      selected
+        .get()
+        .unwrap_or_else(|| {
+          if forward {
+            current
+          } else {
+            previous.unwrap_or(current)
+          }
+        })
+        .max(0),
+    )
+  }
+
+  fn seek(&mut self, mut seek: Seek) -> Result<(), String> {
+    if let Target::Frame { current, forward } = seek.target {
+      seek.target = Target::Time(self.frame_target(seek, current, forward)?);
+    }
+    self.input.seek(seek.generation, self.output.start)?;
     if let Some(video) = &mut self.video {
       video.flush();
     }
@@ -739,23 +789,13 @@ impl Media {
       let result = unsafe { av_read_frame(self.input.raw.as_ptr(), packet) };
       if result == EOF {
         self.decode_video(ptr::null(), publisher)?;
-        if self.last_from_hint && self.output.last_video_pts.is_none() && !publisher.stale() {
-          self.seek(
-            Seek {
-              generation: publisher.generation,
-              target: Target::Last,
-              tracks: TrackChange::default(),
-            },
-            false,
-          )?;
-          continue;
-        }
         if matches!(self.output.target, Target::Last) {
           if let Some(pts) = self.output.last_video_pts {
             let video = self.output.video.frame(
               unsafe { self.last.0.as_ref() },
               pts.max(0),
               self.output.next_video.saturating_sub(pts),
+              self.output.frame_number,
             )?;
             publisher.send(Event::Video(video));
           }
@@ -867,7 +907,7 @@ pub fn run(
     }
     publisher.generation = seek.generation;
     if let Err(error) = media
-      .seek(seek, true)
+      .seek(seek)
       .and_then(|()| media.select_tracks(seek.tracks))
     {
       publisher.send(Event::SeekFailed(error));

@@ -19,7 +19,7 @@ pub use super::ffi::{
   SDL_KeyCode_SDLK_0 as ZERO, SDL_KeyCode_SDLK_9 as NINE, SDL_KeyCode_SDLK_KP_DIVIDE as KP_DIVIDE,
   SDL_KeyCode_SDLK_KP_MULTIPLY as KP_MULTIPLY, SDL_KeyCode_SDLK_a as A, SDL_KeyCode_SDLK_c as C,
   SDL_KeyCode_SDLK_m as M, SDL_KeyCode_SDLK_p as P, SDL_KeyCode_SDLK_s as S,
-  SDL_KeyCode_SDLK_v as V, SDL_KeyCode_SDLK_w as W,
+  SDL_KeyCode_SDLK_w as W,
 };
 
 use super::ffi::{
@@ -30,12 +30,13 @@ use super::ffi::{
 
 pub const LEFT_BUTTON: u8 = SDL_BUTTON_LEFT as u8;
 pub const RIGHT_BUTTON: u8 = SDL_BUTTON_RIGHT as u8;
-const RIGHT_BUTTON_MASK: u32 = 1 << (RIGHT_BUTTON - 1);
 
 pub const SHIFT: u16 = SDL_Keymod_KMOD_SHIFT as u16;
+pub const CTRL: u16 = SDL_Keymod_KMOD_CTRL as u16;
 pub const ALT: u16 = SDL_Keymod_KMOD_ALT as u16;
 pub const Q: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Q;
 pub const F: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_F;
+pub const V: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_V;
 
 #[cfg(target_endian = "little")]
 const RGBA: u32 = SDL_PixelFormatEnum_SDL_PIXELFORMAT_ABGR8888;
@@ -56,10 +57,6 @@ pub enum Event {
     button: u8,
     clicks: u8,
   },
-  RightDrag {
-    x: i32,
-    y: i32,
-  },
   Redraw,
 }
 
@@ -77,7 +74,10 @@ pub struct Ui {
   menu: *mut SDL_Texture,
   menu_size: (i32, i32),
   menu_key: i32,
+  menu_toggle_key: i32,
+  menu_frame: Option<u64>,
   menu_font: fontdue::Font,
+  keyboard_layout: Option<super::keyboard_layout::KeyboardLayout>,
   video: *mut SDL_Texture,
   video_size: (i32, i32),
   geometry: Geometry,
@@ -88,7 +88,7 @@ pub struct Ui {
 }
 
 impl Ui {
-  pub fn new(geometry: Geometry, media_path: PathBuf) -> Result<Self, String> {
+  pub fn new(geometry: Geometry, media_path: PathBuf, file_name: &str) -> Result<Self, String> {
     unsafe {
       if SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER) != 0 {
         return Err(error());
@@ -96,8 +96,10 @@ impl Ui {
       let center = SDL_WINDOWPOS_CENTERED_MASK as i32;
       let (x, y) = geometry.position.unwrap_or((center, center));
       let (w, h) = geometry.size.unwrap_or((640, 480));
+      let title = std::ffi::CString::new(format!("{file_name} - to-view"))
+        .map_err(|_| "invalid window title")?;
       let window = SDL_CreateWindow(
-        c"to-view".as_ptr(),
+        title.as_ptr(),
         x,
         y,
         w,
@@ -132,7 +134,14 @@ impl Ui {
         menu: ptr::null_mut(),
         menu_size: (0, 0),
         menu_key: -1,
+        menu_toggle_key: -1,
+        menu_frame: None,
         menu_font,
+        keyboard_layout: if CStr::from_ptr(SDL_GetCurrentVideoDriver()) == c"x11" {
+          super::keyboard_layout::KeyboardLayout::open()
+        } else {
+          None
+        },
         video: ptr::null_mut(),
         video_size: (0, 0),
         geometry,
@@ -246,6 +255,13 @@ impl Ui {
   }
 
   pub fn event(&mut self) -> Option<Event> {
+    if self
+      .keyboard_layout
+      .as_mut()
+      .is_some_and(|layout| layout.changed())
+    {
+      return Some(Event::Redraw);
+    }
     unsafe {
       let mut event = std::mem::zeroed::<SDL_Event>();
       while SDL_PollEvent(&mut event) != 0 {
@@ -270,16 +286,7 @@ impl Ui {
               clicks: button.clicks,
             });
           }
-          MOUSE_MOTION => {
-            let motion = event.motion;
-            if motion.state & RIGHT_BUTTON_MASK != 0 {
-              return Some(Event::RightDrag {
-                x: motion.x,
-                y: motion.y,
-              });
-            }
-            return Some(Event::Redraw);
-          }
+          MOUSE_MOTION => return Some(Event::Redraw),
           WINDOW_EVENT => {
             if event.window.event as u32 == SDL_WindowEventID_SDL_WINDOWEVENT_CLOSE {
               return Some(Event::Quit);
@@ -409,10 +416,19 @@ impl Ui {
     }
   }
 
-  pub fn menu(&mut self) {
-    let key = unsafe { SDL_GetKeyFromScancode(Q) };
-    if self.menu_key != key {
-      self.update_menu(key);
+  pub fn menu(&mut self, frame: Option<u64>) {
+    let key = self
+      .keyboard_layout
+      .as_ref()
+      .and_then(|layout| layout.key(false))
+      .unwrap_or_else(|| unsafe { SDL_GetKeyFromScancode(Q) });
+    let toggle_key = self
+      .keyboard_layout
+      .as_ref()
+      .and_then(|layout| layout.key(true))
+      .unwrap_or_else(|| unsafe { SDL_GetKeyFromScancode(V) });
+    if self.menu_key != key || self.menu_toggle_key != toggle_key || self.menu_frame != frame {
+      self.update_menu(key, toggle_key, frame);
     }
     let (width, _) = self.size();
     let (menu_w, menu_h) = self.menu_size;
@@ -429,14 +445,21 @@ impl Ui {
     unsafe { SDL_RenderCopy(self.renderer, self.menu, ptr::null(), &dst) };
   }
 
-  fn update_menu(&mut self, key: i32) {
+  fn update_menu(&mut self, key: i32, toggle_key: i32, frame: Option<u64>) {
     use fontdue::layout::{CoordinateSystem, Layout, LayoutSettings, TextStyle};
 
     let label = char::from_u32(key as u32)
       .filter(|ch| !ch.is_control())
       .map(|ch| ch.to_uppercase().collect::<String>())
       .unwrap_or_else(|| "Q".to_owned());
-    let text = format!("Esc - выход из режима меню, {label} - выход");
+    let toggle_label = char::from_u32(toggle_key as u32)
+      .filter(|ch| !ch.is_control())
+      .map(|ch| ch.to_uppercase().collect::<String>())
+      .unwrap_or_else(|| "V".to_owned());
+    let frame = frame.map_or_else(|| "-".to_owned(), |value| value.to_string());
+    let text = format!(
+      "Esc / {toggle_label} - выход из режима меню, {label} - выход\nCtrl+Left / Ctrl+Right - по кадрам\nКадр: {frame}"
+    );
     let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
     layout.reset(&LayoutSettings::default());
     layout.append(&[&self.menu_font], &TextStyle::new(&text, 18.0, 0));
@@ -516,6 +539,8 @@ impl Ui {
       self.menu = texture;
       self.menu_size = (width, height);
       self.menu_key = key;
+      self.menu_toggle_key = toggle_key;
+      self.menu_frame = frame.parse().ok();
     }
   }
 

@@ -1,5 +1,6 @@
 mod audio_output;
 mod ffi;
+mod keyboard_layout;
 mod media;
 mod platform;
 mod sdl;
@@ -35,7 +36,12 @@ pub fn play(options: Options) -> Result<u8, String> {
     return Err(format!("{}: expected a regular video file", path.display()));
   }
   let input = CString::new(path.as_os_str().as_bytes()).map_err(|_| "invalid file path")?;
-  let mut ui = sdl::Ui::new(Geometry::load(&path), path.clone())?;
+  let title = options
+    .path
+    .file_name()
+    .unwrap_or(options.path.as_os_str())
+    .to_string_lossy();
+  let mut ui = sdl::Ui::new(Geometry::load(&path), path.clone(), &title)?;
   let (event_tx, event_rx) = mpsc::sync_channel(4);
   let (seek_tx, seek_rx) = mpsc::channel();
   let requested = Arc::new(AtomicU64::new(0));
@@ -87,6 +93,8 @@ struct Playback {
   position: i64,
   seek_target: Option<Target>,
   frame_end: i64,
+  displayed_frame: Option<i64>,
+  frame_number: Option<u64>,
   aspect: f64,
   paused: bool,
   started: bool,
@@ -121,6 +129,8 @@ impl Playback {
       position: 0,
       seek_target: None,
       frame_end: 0,
+      displayed_frame: None,
+      frame_number: None,
       aspect: 1.0,
       paused: false,
       started: false,
@@ -165,6 +175,8 @@ impl Playback {
         ui.show(Some(size));
         ui.upload(&frame)?;
         self.aspect = frame.aspect;
+        self.displayed_frame = Some(frame.pts);
+        self.frame_number = Some(frame.number);
         self.frame_end = frame.pts.saturating_add(frame.duration);
         self.redraw = true;
       }
@@ -187,8 +199,13 @@ impl Playback {
           visualizer::draw(ui, self.visualization, &self.samples);
         }
         if self.menu {
-          ui.menu();
-          seekbar::draw(ui, self.display_position(), self.duration());
+          ui.menu(self.frame_number);
+          seekbar::draw(
+            ui,
+            self.display_position(),
+            self.duration(),
+            self.paused || self.ended,
+          );
         }
         ui.present();
         self.redraw = false;
@@ -202,6 +219,12 @@ impl Playback {
     match event {
       sdl::Event::Quit => return true,
       sdl::Event::Key { scan: sdl::Q, .. } => return true,
+      sdl::Event::Key {
+        scan: sdl::V,
+        repeat: false,
+        ..
+      } => self.menu = !self.menu,
+      sdl::Event::Key { scan: sdl::V, .. } => {}
       sdl::Event::Key {
         scan: sdl::F,
         repeat: false,
@@ -229,6 +252,17 @@ impl Playback {
         }
         sdl::HOME => self.seek(Target::First),
         sdl::END => self.seek(Target::Last),
+        sdl::LEFT | sdl::RIGHT if mods & sdl::CTRL != 0 => {
+          if self.paused || self.ended {
+            if let Some(current) = self.displayed_frame {
+              self.pause(true);
+              self.seek(Target::Frame {
+                current,
+                forward: code as u32 == sdl::RIGHT,
+              });
+            }
+          }
+        }
         sdl::LEFT | sdl::RIGHT => {
           let seconds = if mods & sdl::SHIFT == 0 {
             1
@@ -248,7 +282,6 @@ impl Playback {
         sdl::PAGE_DOWN => self.chapter(false),
         sdl::PAGE_UP => self.chapter(true),
         sdl::A if !repeat => self.cycle_tracks(true, false),
-        sdl::V if !repeat => self.cycle_tracks(false, true),
         sdl::C if !repeat => self.cycle_tracks(true, true),
         _ => {}
       },
@@ -259,30 +292,37 @@ impl Playback {
         clicks,
       } => {
         let (x, y) = ui.render_point(x, y);
-        if self.menu
+        if self.menu && seekbar::is_button(ui, x, y) {
+          self.toggle_playback();
+        } else if self.menu
           && let Some(fraction) = seekbar::fraction(ui, x, y)
         {
           self.seek_fraction(fraction);
-        } else if clicks == 2 {
-          ui.fullscreen();
+        } else {
+          self.toggle_playback();
+          if clicks == 2 {
+            ui.fullscreen();
+          }
         }
       }
       sdl::Event::Mouse {
-        x,
-        y,
         button: sdl::RIGHT_BUTTON,
         ..
-      }
-      | sdl::Event::RightDrag { x, y } => {
-        let (x, _) = ui.render_point(x, y);
-        let width = ui.size().0;
-        if width > 1 {
-          self.seek_fraction((x as f64 / (width - 1) as f64).clamp(0.0, 1.0));
-        }
+      } => {
+        self.menu = !self.menu;
       }
       _ => {}
     }
     false
+  }
+
+  fn toggle_playback(&mut self) {
+    if self.ended {
+      self.seek(Target::Time(0));
+      self.pause(false);
+    } else {
+      self.pause(!self.paused);
+    }
   }
 
   fn seek_fraction(&mut self, fraction: f64) {
@@ -301,6 +341,7 @@ impl Playback {
       Some(Target::Time(position)) => position,
       Some(Target::First) => 0,
       Some(Target::Last) => self.duration().unwrap_or(self.position),
+      Some(Target::Frame { current, .. }) => current,
       None => self
         .duration()
         .map_or(self.position, |d| self.position.min(d)),

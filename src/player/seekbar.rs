@@ -5,23 +5,47 @@ const LIGHT: (u8, u8, u8) = (255, 255, 255);
 const ADVANCE: i32 = 12;
 const HEIGHT: i32 = 28;
 
-pub fn fraction(ui: &Ui, x: i32, y: i32) -> Option<f64> {
-  let (w, h) = ui.size();
-  (w >= 3 && h >= 3 && (0..w).contains(&x) && ((h - HEIGHT).max(0)..h).contains(&y))
-    .then(|| x as f64 / (w - 1) as f64)
+fn layout(ui: &Ui) -> (Rect, Rect) {
+  let (width, height) = ui.size();
+  let bar_height = HEIGHT.min(height.max(0));
+  let button_width = bar_height.min(width.saturating_sub(2).max(0));
+  (
+    Rect {
+      x: 0,
+      y: height - bar_height,
+      w: button_width,
+      h: bar_height,
+    },
+    Rect {
+      x: button_width,
+      y: height - bar_height,
+      w: width - button_width,
+      h: bar_height,
+    },
+  )
 }
 
-pub fn draw(ui: &Ui, position: i64, duration: Option<i64>) {
-  let (w, h) = ui.size();
-  if w < 3 || h < 3 {
+pub fn is_button(ui: &Ui, x: i32, y: i32) -> bool {
+  let (button, _) = layout(ui);
+  x >= button.x && x < button.x + button.w && y >= button.y && y < button.y + button.h
+}
+
+pub fn fraction(ui: &Ui, x: i32, y: i32) -> Option<f64> {
+  let (_, track) = layout(ui);
+  (track.w >= 2
+    && track.h >= 1
+    && (track.x..track.x + track.w).contains(&x)
+    && (track.y..track.y + track.h).contains(&y))
+  .then(|| (x - track.x) as f64 / (track.w - 1) as f64)
+}
+
+pub fn draw(ui: &Ui, position: i64, duration: Option<i64>, paused: bool) {
+  let (button, track) = layout(ui);
+  draw_button(ui, button, paused);
+  if track.w < 2 || track.h < 2 {
     return;
   }
-  let track = Rect {
-    x: 0,
-    y: (h - HEIGHT).max(0),
-    w,
-    h: HEIGHT.min(h),
-  };
+  let bottom = track.y + track.h;
   let current = format_time(position.max(0));
   let total = duration.map_or_else(|| "-".into(), format_time);
   let hover = duration.and_then(|duration| {
@@ -33,29 +57,73 @@ pub fn draw(ui: &Ui, position: i64, duration: Option<i64>) {
     text(
       ui,
       &format!(" -> {}", format_time(target)),
-      8 + text_width(&current),
+      track.x + 8 + text_width(&current),
       y,
     );
   }
-  text(ui, &current, 8, y);
-  text(ui, &total, w - 8 - text_width(&total), y);
+  text(ui, &current, track.x + 8, y);
+  text(ui, &total, track.x + track.w - 8 - text_width(&total), y);
 
   ui.color(DARK);
   ui.outline(track);
   ui.color(LIGHT);
   ui.outline(Rect {
-    x: 1,
+    x: track.x + 1,
     y: track.y + 1,
-    w: w - 2,
+    w: track.w - 2,
     h: track.h - 2,
   });
   if let Some(duration) = duration {
-    let x =
-      (i128::from(position.clamp(0, duration)) * i128::from(w - 1) / i128::from(duration)) as i32;
-    marker(ui, x, track.y, h, false);
+    let x = track.x
+      + (i128::from(position.clamp(0, duration)) * i128::from(track.w - 1) / i128::from(duration))
+        as i32;
+    marker(ui, x, track.y, bottom, false);
   }
   if let Some((x, _)) = hover {
-    marker(ui, x, track.y, h, true);
+    marker(ui, x, track.y, bottom, true);
+  }
+}
+
+fn draw_button(ui: &Ui, button: Rect, paused: bool) {
+  if button.w < 8 || button.h < 8 {
+    return;
+  }
+  let center_x = button.x + button.w / 2;
+  let center_y = button.y + button.h / 2;
+  let height = (button.h - 8).min(button.w - 8);
+  if paused {
+    let width = (height as f64 * 3.0_f64.sqrt() / 2.0).round() as i32;
+    let left = center_x - width / 2;
+    let top = center_y - height / 2;
+    let bottom = top + height;
+    let tip = left + width;
+    for (offset, color) in [(1, DARK), (0, LIGHT)] {
+      ui.color(color);
+      for dx in -offset..=offset {
+        for dy in -offset..=offset {
+          ui.line(left + dx, top + dy, left + dx, bottom + dy);
+          ui.line(left + dx, top + dy, tip + dx, center_y + dy);
+          ui.line(left + dx, bottom + dy, tip + dx, center_y + dy);
+        }
+      }
+    }
+  } else {
+    for x in [center_x - 4, center_x + 4] {
+      ui.color(DARK);
+      ui.fill(Rect {
+        x: x - 2,
+        y: center_y - height / 2 - 1,
+        w: 5,
+        h: height + 2,
+      });
+      ui.color(LIGHT);
+      ui.fill(Rect {
+        x: x - 1,
+        y: center_y - height / 2,
+        w: 3,
+        h: height,
+      });
+    }
   }
 }
 
