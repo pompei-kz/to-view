@@ -1,4 +1,5 @@
 mod player;
+mod window_geometry;
 
 use std::{env, ffi::OsString, path::PathBuf, process::ExitCode};
 

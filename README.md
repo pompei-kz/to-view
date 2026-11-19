@@ -8,6 +8,8 @@ The Left and Right arrow keys seek by 1 second. Hold Shift to seek by 5 seconds 
 
 By default, the window stays open on the last frame. Use `--close-on-end=1`, `-j`, or `-j1` to close it automatically. Use `--close-on-end=0`, `-J`, or `-j0` to keep it open.
 
+The player restores its window position and size across launches. On exit, it saves the last normal window geometry as two space-separated integers per file in `~/.config/to-view/saves/window/position.txt` and `~/.config/to-view/saves/window/size.txt`.
+
 ## Building on Debian or Ubuntu
 
 Install Rust with Cargo, then install the build tools and X11 headers listed below. If the static X11 archives are missing, the build script can download and extract the X11 packages into the Cargo build directory without administrator privileges.

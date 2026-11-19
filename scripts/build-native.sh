@@ -97,6 +97,7 @@ cd ffmpeg-7.1.1
 patch --silent -p1 < "$script_dir/ffplay-exit-status.patch"
 patch --silent -p1 < "$script_dir/ffplay-menu.patch"
 patch --silent -p1 < "$script_dir/ffplay-seekbar.patch"
+patch --silent -p1 < "$script_dir/ffplay-window-geometry.patch"
 cp "$script_dir/ffplay-seekbar.h" fftools/to_view_seekbar.h
 PKG_CONFIG_PATH="$prefix/lib/pkgconfig" ./configure \
     --disable-autodetect --enable-sdl2 --enable-static --disable-shared \

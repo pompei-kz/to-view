@@ -5,6 +5,7 @@ fn main() {
     println!("cargo:rerun-if-changed=scripts/ffplay-exit-status.patch");
     println!("cargo:rerun-if-changed=scripts/ffplay-menu.patch");
     println!("cargo:rerun-if-changed=scripts/ffplay-seekbar.patch");
+    println!("cargo:rerun-if-changed=scripts/ffplay-window-geometry.patch");
     println!("cargo:rerun-if-changed=scripts/ffplay-seekbar.h");
     println!("cargo:rerun-if-env-changed=TO_VIEW_X11_SYSROOT");
     println!("cargo:rerun-if-env-changed=TO_VIEW_BUILD_JOBS");

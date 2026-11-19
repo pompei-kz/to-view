@@ -29,6 +29,7 @@ pub fn play(options: Options) -> Result<u8, String> {
     if options.close_on_end {
         args.push(b"-autoexit\0".to_vec());
     }
+    crate::window_geometry::add_ffplay_args(&mut args);
     args.push([path.as_os_str().as_bytes(), b"\0"].concat());
     let mut argv: Vec<*mut c_char> = args.iter_mut().map(|arg| arg.as_mut_ptr().cast()).collect();
     argv.push(ptr::null_mut());
