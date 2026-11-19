@@ -1,16 +1,16 @@
 # to-view
 
-Минимальный Rust-плеер с FFmpeg и SDL2. Открывает локальный видеофайл и сразу запускает воспроизведение. Пробел переключает паузу. Esc открывает и закрывает меню в левом верхнем углу поверх видео, сохраняя состояние воспроизведения. Нажмите клавишу Q/Й в любой раскладке или кнопку закрытия окна, чтобы выйти.
+A minimal Rust video player powered by FFmpeg and SDL2. Open a local video file to start playback immediately. Press Space to toggle pause. Esc toggles the menu overlay in the upper-left corner and preserves the current playback state. To quit, press the physical Q/Й key in any keyboard layout or use the window's close button.
 
-В режиме меню внизу видна полоса прокрутки. Наведите на неё мышь, чтобы увидеть время перемотки, и щёлкните левой кнопкой, чтобы перейти к выбранной позиции.
+The seekbar appears at the bottom when the menu is open. Hover over it to preview a timestamp and left-click to jump there.
 
-Стрелки ← и → перематывают на 1 секунду. С Shift шаг составляет 5 секунд, с Shift+Alt — 30 секунд. На границах файла стрелки останавливаются на первом или последнем кадре. Home и End сразу переходят к первому и последнему кадру и ставят воспроизведение на паузу.
+The Left and Right arrow keys seek by 1 second. Hold Shift to seek by 5 seconds or Shift+Alt to seek by 30 seconds. At the boundaries, the arrow keys stop on the first or last frame. Home and End jump directly to the first and last frames, respectively, and pause playback.
 
-По умолчанию окно остаётся открытым на последнем кадре. Укажите `--close-on-end=1`, `-j` или `-j1` для автоматического закрытия. `--close-on-end=0`, `-J` и `-j0` оставляют окно открытым.
+By default, the window stays open on the last frame. Use `--close-on-end=1`, `-j`, or `-j1` to close it automatically. Use `--close-on-end=0`, `-J`, or `-j0` to keep it open.
 
-## Сборка на Debian или Ubuntu
+## Building on Debian or Ubuntu
 
-Установите Rust с Cargo и инструменты сборки с заголовками X11. В командах ниже перечислены пакеты для сборки. Если статические архивы X11 отсутствуют, на Debian и Ubuntu скрипт сборки может скачать и распаковать пакеты X11 в каталог Cargo без прав администратора.
+Install Rust with Cargo, then install the build tools and X11 headers listed below. If the static X11 archives are missing, the build script can download and extract the X11 packages into the Cargo build directory without administrator privileges.
 
 ```sh
 sudo apt install build-essential binutils pkg-config curl xz-utils bzip2 patch \
@@ -19,10 +19,10 @@ cargo build --release
 ./target/release/to-view /path/to/video/file.mp4
 ```
 
-При первой сборке Cargo загружает зафиксированные исходники FFmpeg, SDL2 и ALSA. Собранный бинарник включает эти библиотеки, клиент X11 и иконку. Для окна нужен доступный сервер X11 либо Xwayland. Для звука нужен доступ к устройству ALSA. Переменная `AUDIODEV` позволяет выбрать устройство, например `AUDIODEV=plughw:1,0`. Первая версия ориентирована на Linux с X11 и программным рендерингом.
+On the first build, Cargo downloads the pinned source releases of FFmpeg, SDL2, and ALSA. The resulting binary includes those libraries, the X11 client, and the icon. The player needs access to an X11 or Xwayland server to open a window and to an ALSA device for sound. Set `AUDIODEV` to select an audio device, for example `AUDIODEV=plughw:1,0`. This version targets Linux with X11 and uses software rendering.
 
 ```sh
 readelf -l -d target/release/to-view
 ```
 
-У статического файла отсутствуют заголовок `INTERP` и записи `NEEDED`. Для путей, начинающихся с дефиса, используйте `to-view -- -video.mp4`.
+The static binary has no `INTERP` program header or `NEEDED` entries. For paths that begin with a hyphen, use `to-view -- -video.mp4`.
