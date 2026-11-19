@@ -22,7 +22,7 @@ fn read_pair(path: &Path) -> Option<(i32, i32)> {
   values.next().is_none().then_some((first, second))
 }
 
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
 pub struct Geometry {
   pub position: Option<(i32, i32)>,
   pub size: Option<(i32, i32)>,

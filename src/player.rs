@@ -46,7 +46,6 @@ pub fn play(options: Options) -> Result<u8, String> {
     .map_err(|e| format!("start media decoder: {e}"))?;
   let mut playback = Playback::new(requested, seek_tx, event_rx);
   let result = playback.run(&mut ui, options.close_on_end);
-  ui.save();
   playback.requested.store(media::STOP, Ordering::Release);
   drop(playback);
   worker
@@ -149,6 +148,7 @@ impl Playback {
           return Ok(());
         }
       }
+      ui.save_geometry_if_due();
       self.receive()?;
       self.update_clock();
       if let Some(frame) = self.next_frame() {

@@ -1,6 +1,10 @@
 use super::{ffi::*, media};
 use crate::window_geometry::Geometry;
-use std::{ffi::CStr, ptr};
+use std::{
+  ffi::CStr,
+  ptr,
+  time::{Duration, Instant},
+};
 
 pub use super::ffi::{
   SDL_KeyCode_SDLK_DOWN as DOWN, SDL_KeyCode_SDLK_END as END, SDL_KeyCode_SDLK_ESCAPE as ESC,
@@ -72,7 +76,8 @@ pub struct Ui {
   menu_size: (i32, i32),
   video: *mut SDL_Texture,
   video_size: (i32, i32),
-  geometry: Option<Geometry>,
+  geometry: Geometry,
+  geometry_changed_at: Option<Instant>,
   saved_size: bool,
   visible: bool,
 }
@@ -128,7 +133,8 @@ impl Ui {
         menu_size,
         video: ptr::null_mut(),
         video_size: (0, 0),
-        geometry: None,
+        geometry,
+        geometry_changed_at: None,
         saved_size: geometry.size.is_some(),
         visible: false,
       })
@@ -167,18 +173,25 @@ impl Ui {
       SDL_GetWindowPosition(self.window, &mut x, &mut y);
       SDL_GetWindowSize(self.window, &mut w, &mut h);
       if w > 0 && h > 0 {
-        self.geometry = Some(Geometry {
+        let geometry = Geometry {
           position: Some((x, y)),
           size: Some((w, h)),
-        });
+        };
+        if self.geometry != geometry {
+          self.geometry = geometry;
+          self.geometry_changed_at = Some(Instant::now());
+        }
       }
     }
   }
 
-  pub fn save(&mut self) {
-    self.remember();
-    if let Some(geometry) = self.geometry {
-      geometry.save();
+  pub fn save_geometry_if_due(&mut self) {
+    if self
+      .geometry_changed_at
+      .is_some_and(|changed| changed.elapsed() >= Duration::from_millis(300))
+    {
+      self.geometry_changed_at = None;
+      self.geometry.save();
     }
   }
 
