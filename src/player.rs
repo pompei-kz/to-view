@@ -203,11 +203,16 @@ impl Playback {
       sdl::Event::Quit => return true,
       sdl::Event::Key { scan: sdl::Q, .. } => return true,
       sdl::Event::Key {
+        scan: sdl::F,
+        repeat: false,
+        ..
+      } => ui.fullscreen(),
+      sdl::Event::Key { scan: sdl::F, .. } => {}
+      sdl::Event::Key {
         code, mods, repeat, ..
       } => match code as u32 {
         sdl::ESC if !repeat => self.menu = !self.menu,
         sdl::SPACE | sdl::P if !repeat => self.pause(!self.paused),
-        sdl::F if !repeat => ui.fullscreen(),
         sdl::M if !repeat => self.muted = !self.muted,
         sdl::W if !repeat => {
           if let Some(media) = &self.metadata

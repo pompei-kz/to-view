@@ -1,6 +1,6 @@
 # to-view
 
-A minimal video player with a Rust playback engine. It uses FFmpeg for demuxing and decoding and SDL2 for the window, input, and output. Open a local video file to start playback immediately. Press Space to toggle pause. Esc toggles the menu overlay in the upper-left corner and preserves the current playback state. To quit, press the physical Q/Й key in any keyboard layout or use the window's close button.
+A minimal video player with a Rust playback engine. It uses FFmpeg for demuxing and decoding and SDL2 for the window, input, and output. Open a local video file to start playback immediately. Press Space to toggle pause. Esc toggles the menu overlay in the upper-left corner and preserves the current playback state. Press the physical F/А key to toggle fullscreen, regardless of keyboard layout or Caps Lock. To quit, press the physical Q/Й key in any keyboard layout or use the window's close button.
 
 The bundled FFmpeg build supports MP4/MOV, Matroska/WebM, AVI, and MPEG-TS. Common codecs include H.264, HEVC, AV1, VP8, VP9, AAC, and Opus.
 

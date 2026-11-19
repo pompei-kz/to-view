@@ -18,8 +18,8 @@ pub use super::ffi::{
 pub use super::ffi::{
   SDL_KeyCode_SDLK_0 as ZERO, SDL_KeyCode_SDLK_9 as NINE, SDL_KeyCode_SDLK_KP_DIVIDE as KP_DIVIDE,
   SDL_KeyCode_SDLK_KP_MULTIPLY as KP_MULTIPLY, SDL_KeyCode_SDLK_a as A, SDL_KeyCode_SDLK_c as C,
-  SDL_KeyCode_SDLK_f as F, SDL_KeyCode_SDLK_m as M, SDL_KeyCode_SDLK_p as P,
-  SDL_KeyCode_SDLK_s as S, SDL_KeyCode_SDLK_v as V, SDL_KeyCode_SDLK_w as W,
+  SDL_KeyCode_SDLK_m as M, SDL_KeyCode_SDLK_p as P, SDL_KeyCode_SDLK_s as S,
+  SDL_KeyCode_SDLK_v as V, SDL_KeyCode_SDLK_w as W,
 };
 
 use super::ffi::{
@@ -35,6 +35,7 @@ const RIGHT_BUTTON_MASK: u32 = 1 << (RIGHT_BUTTON - 1);
 pub const SHIFT: u16 = SDL_Keymod_KMOD_SHIFT as u16;
 pub const ALT: u16 = SDL_Keymod_KMOD_ALT as u16;
 pub const Q: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Q;
+pub const F: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_F;
 
 #[cfg(target_endian = "little")]
 const RGBA: u32 = SDL_PixelFormatEnum_SDL_PIXELFORMAT_ABGR8888;
