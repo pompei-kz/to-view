@@ -2,13 +2,11 @@ use std::{env, fs, path::PathBuf, process::Command};
 
 fn main() {
     println!("cargo:rerun-if-changed=scripts/build-native.sh");
-    println!("cargo:rerun-if-changed=scripts/ffplay-exit-status.patch");
-    println!("cargo:rerun-if-changed=scripts/ffplay-menu.patch");
-    println!("cargo:rerun-if-changed=scripts/ffplay-seekbar.patch");
-    println!("cargo:rerun-if-changed=scripts/ffplay-window-geometry.patch");
-    println!("cargo:rerun-if-changed=scripts/ffplay-seekbar.h");
+    println!("cargo:rerun-if-changed=scripts/link-native.sh");
+    println!("cargo:rerun-if-changed=scripts/native-bindings.h");
     println!("cargo:rerun-if-env-changed=TO_VIEW_X11_SYSROOT");
     println!("cargo:rerun-if-env-changed=TO_VIEW_BUILD_JOBS");
+    println!("cargo:rerun-if-env-changed=TO_VIEW_BINDGEN");
 
     assert_eq!(
         env::var("TARGET").unwrap(),
@@ -19,14 +17,6 @@ fn main() {
         env::var("TARGET").unwrap().ends_with("-linux-gnu"),
         "to-view requires Linux with a GNU build toolchain"
     );
-    assert!(
-        env::var("CARGO_CFG_TARGET_FEATURE")
-            .unwrap_or_default()
-            .split(',')
-            .any(|feature| feature == "crt-static"),
-        "to-view requires +crt-static"
-    );
-
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("native");
     let status = Command::new("bash")
         .arg("scripts/build-native.sh")
@@ -39,18 +29,11 @@ fn main() {
         PathBuf::from(fs::read_to_string(out.join("xlib-path")).expect("missing X11 library path"));
 
     println!("cargo:rustc-link-arg=-fuse-ld=bfd");
+    println!("cargo:rustc-link-arg=-static-pie");
     println!(
-        "cargo:rustc-link-arg=-Wl,-Bstatic,--wrap=SDL_CreateWindow,--wrap=snd_pcm_open,--wrap=dlopen,--wrap=__libc_dlopen_mode,--start-group"
+        "cargo:rustc-link-arg=-Wl,-Bstatic,--wrap=snd_pcm_open,--wrap=dlopen,--wrap=__libc_dlopen_mode,--start-group"
     );
-    println!("cargo:rustc-link-arg={}", out.join("libffplay.a").display());
-    for name in [
-        "avformat",
-        "avcodec",
-        "avfilter",
-        "swresample",
-        "swscale",
-        "avutil",
-    ] {
+    for name in ["avformat", "avcodec", "swresample", "swscale", "avutil"] {
         println!(
             "cargo:rustc-link-arg={}",
             out.join(format!("ffmpeg-7.1.1/lib{name}/lib{name}.a"))

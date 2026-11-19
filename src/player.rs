@@ -1,9 +1,26 @@
+mod audio_output;
+mod ffi;
+mod media;
+mod platform;
+mod sdl;
+mod seekbar;
+mod visualizer;
+
+use crate::window_geometry::Geometry;
+use media::{Event, Message, Seek, Target, TrackChange};
 use std::{
-    ffi::{c_char, c_int, c_void},
+    collections::VecDeque,
+    ffi::CString,
     fs,
     os::unix::ffi::OsStrExt,
     path::PathBuf,
-    ptr,
+    sync::{
+        Arc,
+        atomic::{AtomicU64, Ordering},
+        mpsc::{self, Receiver, Sender, TryRecvError},
+    },
+    thread,
+    time::{Duration, Instant},
 };
 
 pub struct Options {
@@ -17,148 +34,580 @@ pub fn play(options: Options) -> Result<u8, String> {
     if !path.is_file() {
         return Err(format!("{}: expected a regular video file", path.display()));
     }
+    let input = CString::new(path.as_os_str().as_bytes()).map_err(|_| "invalid file path")?;
+    let mut ui = sdl::Ui::new(Geometry::load())?;
+    let (event_tx, event_rx) = mpsc::sync_channel(4);
+    let (seek_tx, seek_rx) = mpsc::channel();
+    let requested = Arc::new(AtomicU64::new(0));
+    let worker_request = Arc::clone(&requested);
+    let worker = thread::Builder::new()
+        .name("media decoder".into())
+        .spawn(move || media::run(input, worker_request, seek_rx, event_tx))
+        .map_err(|e| format!("start media decoder: {e}"))?;
+    let mut playback = Playback::new(requested, seek_tx, event_rx);
+    let result = playback.run(&mut ui, options.close_on_end);
+    ui.save();
+    playback.requested.store(media::STOP, Ordering::Release);
+    drop(playback);
+    worker
+        .join()
+        .map_err(|_| "media decoder stopped unexpectedly")?;
+    result.map(|()| 0)
+}
 
-    let mut args = vec![
-        b"to-view\0".to_vec(),
-        b"-hide_banner\0".to_vec(),
-        b"-loglevel\0".to_vec(),
-        b"error\0".to_vec(),
-        b"-window_title\0".to_vec(),
-        b"to-view\0".to_vec(),
-    ];
-    if options.close_on_end {
-        args.push(b"-autoexit\0".to_vec());
+struct Clock {
+    position: i64,
+    updated: Instant,
+}
+
+impl Clock {
+    fn set(&mut self, position: i64) {
+        self.position = position;
+        self.updated = Instant::now();
     }
-    crate::window_geometry::add_ffplay_args(&mut args);
-    args.push([path.as_os_str().as_bytes(), b"\0"].concat());
-    let mut argv: Vec<*mut c_char> = args.iter_mut().map(|arg| arg.as_mut_ptr().cast()).collect();
-    argv.push(ptr::null_mut());
 
-    // ffplay owns the event loop and normally terminates the process itself.
-    // The argument buffers remain writable and valid for the entire call.
-    let status = unsafe { to_view_ffplay_main(args.len() as c_int, argv.as_mut_ptr()) };
-    Ok(u8::try_from(status).unwrap_or(1))
+    fn running(&self) -> i64 {
+        self.position
+            .saturating_add(self.updated.elapsed().as_micros() as i64)
+    }
 }
 
-type Window = c_void;
-type Surface = c_void;
-type Stream = c_void;
-type Pcm = c_void;
-type AlsaConfig = c_void;
-
-unsafe extern "C" {
-    fn to_view_ffplay_main(argc: c_int, argv: *mut *mut c_char) -> c_int;
-    fn __real_SDL_CreateWindow(
-        title: *const c_char,
-        x: c_int,
-        y: c_int,
-        w: c_int,
-        h: c_int,
-        flags: u32,
-    ) -> *mut Window;
-    fn SDL_RWFromConstMem(mem: *const c_void, size: c_int) -> *mut Stream;
-    fn SDL_LoadBMP_RW(stream: *mut Stream, free_stream: c_int) -> *mut Surface;
-    fn SDL_SetWindowIcon(window: *mut Window, surface: *mut Surface);
-    fn SDL_FreeSurface(surface: *mut Surface);
-    fn __real_snd_pcm_open(
-        pcm: *mut *mut Pcm,
-        name: *const c_char,
-        stream: c_int,
-        mode: c_int,
-    ) -> c_int;
-    fn snd_pcm_open_lconf(
-        pcm: *mut *mut Pcm,
-        name: *const c_char,
-        stream: c_int,
-        mode: c_int,
-        config: *mut AlsaConfig,
-    ) -> c_int;
-    fn snd_config_load_string(
-        config: *mut *mut AlsaConfig,
-        text: *const c_char,
-        size: usize,
-    ) -> c_int;
-    fn snd_card_next(card: *mut c_int) -> c_int;
-    fn snd_config_delete(config: *mut AlsaConfig) -> c_int;
+struct Playback {
+    requested: Arc<AtomicU64>,
+    commands: Sender<Seek>,
+    events: Receiver<Message>,
+    deferred: Option<Message>,
+    metadata: Option<media::Metadata>,
+    generation: u64,
+    video: VecDeque<media::Video>,
+    audio: Option<audio_output::Output>,
+    audio_tail: Option<i64>,
+    audio_drained_at: Option<Instant>,
+    clock: Clock,
+    position: i64,
+    seek_target: Option<Target>,
+    frame_end: i64,
+    aspect: f64,
+    paused: bool,
+    started: bool,
+    eof: bool,
+    ended: bool,
+    stepping: bool,
+    menu: bool,
+    redraw: bool,
+    volume: f32,
+    muted: bool,
+    visualization: visualizer::Mode,
+    samples: Vec<f32>,
 }
 
-#[unsafe(no_mangle)]
-unsafe extern "C" fn __wrap_SDL_CreateWindow(
-    title: *const c_char,
-    x: c_int,
-    y: c_int,
-    w: c_int,
-    h: c_int,
-    flags: u32,
-) -> *mut Window {
-    const ICON: &[u8] = include_bytes!("../assets/icon.bmp");
-    unsafe {
-        let window = __real_SDL_CreateWindow(title, x, y, w, h, flags);
-        if !window.is_null() {
-            let icon = load_bmp(ICON);
-            if !icon.is_null() {
-                SDL_SetWindowIcon(window, icon);
-                SDL_FreeSurface(icon);
+impl Playback {
+    fn new(requested: Arc<AtomicU64>, commands: Sender<Seek>, events: Receiver<Message>) -> Self {
+        Self {
+            requested,
+            commands,
+            events,
+            deferred: None,
+            metadata: None,
+            generation: 0,
+            video: VecDeque::new(),
+            audio: None,
+            audio_tail: None,
+            audio_drained_at: None,
+            clock: Clock {
+                position: 0,
+                updated: Instant::now(),
+            },
+            position: 0,
+            seek_target: None,
+            frame_end: 0,
+            aspect: 1.0,
+            paused: false,
+            started: false,
+            eof: false,
+            ended: false,
+            stepping: false,
+            menu: false,
+            redraw: true,
+            volume: 1.0,
+            muted: false,
+            visualization: visualizer::Mode::Video,
+            samples: Vec::new(),
+        }
+    }
+
+    fn duration(&self) -> Option<i64> {
+        self.metadata.as_ref().and_then(|media| media.duration)
+    }
+
+    fn run(&mut self, ui: &mut sdl::Ui, close_on_end: bool) -> Result<(), String> {
+        let opening = Instant::now();
+        loop {
+            while let Some(event) = ui.event() {
+                if self.input(ui, event) {
+                    return Ok(());
+                }
+            }
+            self.receive()?;
+            self.update_clock();
+            if let Some(frame) = self.next_frame() {
+                let rotation = self.metadata.as_ref().map_or(0.0, |media| media.rotation);
+                let display_width = (frame.height as f64 * frame.aspect)
+                    .round()
+                    .clamp(1.0, 8192.0) as i32;
+                let size = if rotation.abs().rem_euclid(180.0) > 45.0
+                    && rotation.abs().rem_euclid(180.0) < 135.0
+                {
+                    (frame.height, display_width)
+                } else {
+                    (display_width, frame.height)
+                };
+                ui.show(Some(size));
+                ui.upload(&frame)?;
+                self.aspect = frame.aspect;
+                self.frame_end = frame.pts.saturating_add(frame.duration);
+                self.redraw = true;
+            }
+            if self.metadata.as_ref().is_some_and(|media| !media.has_video)
+                || (!self.started && opening.elapsed() >= Duration::from_millis(300))
+            {
+                ui.show(None);
+            }
+            if self.finish(close_on_end)? {
+                return Ok(());
+            }
+            if self.redraw {
+                if self.visualization == visualizer::Mode::Video {
+                    ui.background(
+                        self.aspect,
+                        self.metadata.as_ref().map_or(0.0, |media| media.rotation),
+                    );
+                } else {
+                    ui.clear();
+                    visualizer::draw(ui, self.visualization, &self.samples);
+                }
+                if self.menu {
+                    ui.menu();
+                    seekbar::draw(ui, self.display_position(), self.duration());
+                }
+                ui.present();
+                self.redraw = false;
+            }
+            thread::sleep(Duration::from_millis(4));
+        }
+    }
+
+    fn input(&mut self, ui: &mut sdl::Ui, event: sdl::Event) -> bool {
+        self.redraw = true;
+        match event {
+            sdl::Event::Quit => return true,
+            sdl::Event::Key { scan: sdl::Q, .. } => return true,
+            sdl::Event::Key {
+                code, mods, repeat, ..
+            } => match code as u32 {
+                sdl::ESC if !repeat => self.menu = !self.menu,
+                sdl::SPACE | sdl::P if !repeat => self.pause(!self.paused),
+                sdl::F if !repeat => ui.fullscreen(),
+                sdl::M if !repeat => self.muted = !self.muted,
+                sdl::W if !repeat => {
+                    if let Some(media) = &self.metadata
+                        && media.has_audio
+                    {
+                        self.visualization = self.visualization.next(media.has_video);
+                    }
+                }
+                sdl::ZERO | sdl::KP_MULTIPLY => self.volume = (self.volume + 0.1).min(1.0),
+                sdl::NINE | sdl::KP_DIVIDE => self.volume = (self.volume - 0.1).max(0.0),
+                sdl::S if !repeat && !self.ended => {
+                    self.pause(true);
+                    self.stepping = true;
+                }
+                sdl::HOME => self.seek(Target::First),
+                sdl::END => self.seek(Target::Last),
+                sdl::LEFT | sdl::RIGHT => {
+                    let seconds = if mods & sdl::SHIFT == 0 {
+                        1
+                    } else if mods & sdl::ALT != 0 {
+                        30
+                    } else {
+                        5
+                    };
+                    self.relative(if code as u32 == sdl::LEFT {
+                        -seconds
+                    } else {
+                        seconds
+                    });
+                }
+                sdl::DOWN => self.relative(-60),
+                sdl::UP => self.relative(60),
+                sdl::PAGE_DOWN => self.chapter(false),
+                sdl::PAGE_UP => self.chapter(true),
+                sdl::A if !repeat => self.cycle_tracks(true, false),
+                sdl::V if !repeat => self.cycle_tracks(false, true),
+                sdl::C if !repeat => self.cycle_tracks(true, true),
+                _ => {}
+            },
+            sdl::Event::Mouse {
+                x,
+                y,
+                button: sdl::LEFT_BUTTON,
+                clicks,
+            } => {
+                let (x, y) = ui.render_point(x, y);
+                if self.menu
+                    && let Some(fraction) = seekbar::fraction(ui, x, y)
+                {
+                    self.seek_fraction(fraction);
+                } else if clicks == 2 {
+                    ui.fullscreen();
+                }
+            }
+            sdl::Event::Mouse {
+                x,
+                y,
+                button: sdl::RIGHT_BUTTON,
+                ..
+            }
+            | sdl::Event::RightDrag { x, y } => {
+                let (x, _) = ui.render_point(x, y);
+                let width = ui.size().0;
+                if width > 1 {
+                    self.seek_fraction((x as f64 / (width - 1) as f64).clamp(0.0, 1.0));
+                }
+            }
+            _ => {}
+        }
+        false
+    }
+
+    fn seek_fraction(&mut self, fraction: f64) {
+        if let Some(duration) = self.duration() {
+            let position = (fraction * duration as f64).round() as i64;
+            if position >= duration {
+                self.seek(Target::Last);
+            } else {
+                self.seek(Target::Time(position));
             }
         }
-        window
     }
-}
 
-fn load_bmp(bytes: &'static [u8]) -> *mut Surface {
-    unsafe {
-        let source = SDL_RWFromConstMem(bytes.as_ptr().cast(), bytes.len() as c_int);
-        if source.is_null() {
-            return ptr::null_mut();
+    fn display_position(&self) -> i64 {
+        match self.seek_target {
+            Some(Target::Time(position)) => position,
+            Some(Target::First) => 0,
+            Some(Target::Last) => self.duration().unwrap_or(self.position),
+            None => self
+                .duration()
+                .map_or(self.position, |d| self.position.min(d)),
         }
-        SDL_LoadBMP_RW(source, 1)
     }
-}
 
-#[unsafe(no_mangle)]
-extern "C" fn to_view_load_menu_label() -> *mut Surface {
-    load_bmp(include_bytes!("../assets/menu-label.bmp"))
-}
-
-// ALSA can try the host's default PCM first. The embedded fallback can use
-// a kernel audio device even when there is no system ALSA configuration on disk.
-#[unsafe(no_mangle)]
-unsafe extern "C" fn __wrap_snd_pcm_open(
-    pcm: *mut *mut Pcm,
-    name: *const c_char,
-    stream: c_int,
-    mode: c_int,
-) -> c_int {
-    unsafe {
-        let result = __real_snd_pcm_open(pcm, name, stream, mode);
-        if result >= 0 || std::ffi::CStr::from_ptr(name) != c"default" {
-            return result;
+    fn relative(&mut self, seconds: i64) {
+        if seconds > 0 && self.ended {
+            return;
         }
-        let mut card = -1;
-        while snd_card_next(&mut card) >= 0 && card >= 0 {
-            let text = format!("pcm.default {{ type plug slave.pcm {{ type hw card {card} }} }}");
-            let mut config = ptr::null_mut();
-            if snd_config_load_string(&mut config, text.as_ptr().cast(), text.len()) < 0 {
-                return result;
+        let target = self.display_position().saturating_add(seconds * 1_000_000);
+        if target <= 0 {
+            self.seek(Target::First);
+        } else if self.duration().is_some_and(|duration| target >= duration) {
+            self.seek(Target::Last);
+        } else {
+            self.seek(Target::Time(target));
+        }
+    }
+
+    fn chapter(&mut self, forward: bool) {
+        let Some(metadata) = &self.metadata else {
+            return;
+        };
+        if metadata.chapters.len() <= 1 {
+            self.relative(if forward { 600 } else { -600 });
+            return;
+        }
+        let position = self.display_position();
+        let index = metadata.chapters.partition_point(|pts| *pts <= position);
+        let destination = if forward {
+            index
+        } else {
+            index.saturating_sub(2)
+        };
+        if let Some(&target) = metadata.chapters.get(destination) {
+            self.seek(Target::Time(target));
+        }
+    }
+
+    fn cycle_tracks(&mut self, audio: bool, video: bool) {
+        let Some(metadata) = &self.metadata else {
+            return;
+        };
+        let tracks = TrackChange {
+            audio: audio && metadata.audio_tracks > 1,
+            video: video && metadata.video_tracks > 1,
+        };
+        if tracks.audio || tracks.video {
+            self.request_seek(Target::Time(self.display_position()), tracks);
+        }
+    }
+
+    fn seek(&mut self, target: Target) {
+        self.request_seek(target, TrackChange::default());
+    }
+
+    fn request_seek(&mut self, target: Target, tracks: TrackChange) {
+        if self.metadata.is_none()
+            || (matches!(target, Target::Last)
+                && (self.ended || matches!(self.seek_target, Some(Target::Last))))
+            || (matches!(target, Target::First)
+                && self.paused
+                && self.position == 0
+                && self.seek_target.is_none())
+        {
+            return;
+        }
+        if matches!(target, Target::First | Target::Last) {
+            self.pause(true);
+        }
+        self.generation += 1;
+        self.requested.store(self.generation, Ordering::Release);
+        let _ = self.commands.send(Seek {
+            generation: self.generation,
+            target,
+            tracks,
+        });
+        self.seek_target = Some(target);
+        self.video.clear();
+        self.deferred = None;
+        self.eof = false;
+        self.ended = false;
+        self.stepping = false;
+        self.audio_tail = None;
+        self.audio_drained_at = None;
+        self.samples.clear();
+        if let Some(audio) = &self.audio {
+            audio.pause(true);
+            audio.clear();
+        }
+    }
+
+    fn pause(&mut self, paused: bool) {
+        self.update_clock();
+        self.paused = paused;
+        self.clock.set(self.position);
+        if let Some(audio) = &self.audio {
+            audio.pause(paused || self.seek_target.is_some());
+        }
+    }
+
+    fn receive(&mut self) -> Result<(), String> {
+        for _ in 0..12 {
+            let message = match self.deferred.take() {
+                Some(message) => message,
+                None => match self.events.try_recv() {
+                    Ok(message) => message,
+                    Err(TryRecvError::Empty) => break,
+                    Err(TryRecvError::Disconnected) if self.eof => break,
+                    Err(TryRecvError::Disconnected) => return Err("media decoder exited".into()),
+                },
+            };
+            if message.generation != self.generation {
+                continue;
             }
-            let status = snd_pcm_open_lconf(pcm, name, stream, mode, config);
-            snd_config_delete(config);
-            if status >= 0 {
-                return status;
+            match message.event {
+                Event::Open(metadata) => {
+                    let use_audio = metadata.has_audio && self.audio.is_none();
+                    let audio_only = !metadata.has_video;
+                    self.metadata = Some(metadata);
+                    if audio_only {
+                        self.visualization = visualizer::Mode::Spectrum;
+                    }
+                    if use_audio {
+                        match audio_output::Output::open() {
+                            Ok(audio) => self.audio = Some(audio),
+                            Err(error) if audio_only => {
+                                return Err(format!("audio output unavailable: {error}"));
+                            }
+                            Err(error) => eprintln!("to-view: audio output unavailable: {error}"),
+                        }
+                    }
+                }
+                Event::Video(frame) if self.video.len() >= 4 => {
+                    self.deferred = Some(Message {
+                        event: Event::Video(frame),
+                        ..message
+                    });
+                    break;
+                }
+                Event::Video(frame) => self.video.push_back(frame),
+                Event::Audio(audio)
+                    if self
+                        .audio
+                        .as_ref()
+                        .is_some_and(|device| device.queued() > 450_000) =>
+                {
+                    if self.seek_target.is_none() && self.started {
+                        self.deferred = Some(Message {
+                            event: Event::Audio(audio),
+                            ..message
+                        });
+                        break;
+                    }
+                }
+                Event::Audio(audio) => self.queue_audio(audio)?,
+                Event::End => self.eof = true,
+                Event::SeekFailed(error) => {
+                    eprintln!("to-view: {error}");
+                    self.seek_target = None;
+                    self.clock.set(self.position);
+                    if let Some(audio) = &self.audio {
+                        audio.pause(self.paused);
+                    }
+                }
+                Event::Error(error) => return Err(error),
             }
         }
-        result
+        Ok(())
     }
-}
 
-// Xlib optionally loads input-method modules. Refuse shared objects so the
-// executable also stays independent of shared libraries after startup.
-#[unsafe(no_mangle)]
-extern "C" fn __wrap_dlopen(_filename: *const c_char, _flags: c_int) -> *mut c_void {
-    ptr::null_mut()
-}
+    fn queue_audio(&mut self, mut audio: media::Audio) -> Result<(), String> {
+        if self.metadata.as_ref().is_some_and(|media| !media.has_video)
+            && (!self.started || self.seek_target.is_some())
+        {
+            self.position = audio.pts.max(0);
+            self.clock.set(self.position);
+            self.seek_target = None;
+            self.started = true;
+        }
+        if self.visualization != visualizer::Mode::Video
+            && (!self.paused || self.samples.is_empty())
+        {
+            let start = audio.samples.len().saturating_sub(512 * media::CHANNELS);
+            self.samples.clear();
+            self.samples.extend(
+                audio.samples[start..]
+                    .chunks_exact(media::CHANNELS)
+                    .map(|chunk| chunk.iter().sum::<f32>() / media::CHANNELS as f32),
+            );
+            self.redraw = true;
+        }
+        let Some(device) = &self.audio else {
+            return Ok(());
+        };
+        let gain = if self.muted { 0.0 } else { self.volume };
+        if gain != 1.0 {
+            for sample in &mut audio.samples {
+                *sample *= gain;
+            }
+        }
+        let duration = (audio.samples.len() / media::CHANNELS) as i64 * 1_000_000
+            / i64::from(media::SAMPLE_RATE);
+        device.queue(&audio.samples)?;
+        self.audio_tail = Some(audio.pts.saturating_add(duration));
+        self.audio_drained_at = None;
+        if self.started && !self.paused && self.seek_target.is_none() {
+            device.pause(false);
+        }
+        Ok(())
+    }
 
-#[unsafe(no_mangle)]
-extern "C" fn __wrap___libc_dlopen_mode(filename: *const c_char, flags: c_int) -> *mut c_void {
-    __wrap_dlopen(filename, flags)
+    fn update_clock(&mut self) {
+        if !self.started || self.paused || self.ended || self.seek_target.is_some() {
+            return;
+        }
+        if let (Some(audio), Some(tail)) = (&self.audio, self.audio_tail) {
+            let queued = audio.queued();
+            let elapsed = if queued > 0 {
+                self.audio_drained_at = None;
+                0
+            } else {
+                self.audio_drained_at
+                    .get_or_insert_with(Instant::now)
+                    .elapsed()
+                    .as_micros() as i64
+            };
+            let played = tail
+                .saturating_sub(queued)
+                .saturating_sub(audio.latency())
+                .saturating_add(elapsed);
+            self.position = self.position.max(played);
+            self.clock.set(self.position);
+        } else {
+            self.position = self.clock.running();
+        }
+    }
+
+    fn next_frame(&mut self) -> Option<media::Video> {
+        if self.video.is_empty() {
+            return None;
+        }
+        if !self.started || self.seek_target.is_some() || self.stepping {
+            let frame = self.video.pop_front()?;
+            let target = self.seek_target.take();
+            self.position = match target {
+                Some(Target::Time(time)) => time.max(frame.pts),
+                Some(Target::Last) => self.duration().unwrap_or(frame.pts),
+                _ => frame.pts,
+            };
+            self.clock.set(self.position);
+            self.started = true;
+            self.stepping = false;
+            if matches!(target, Some(Target::Last)) {
+                self.ended = true;
+            }
+            if let Some(audio) = &self.audio {
+                audio.pause(self.paused);
+            }
+            return Some(frame);
+        }
+        if self.paused || self.ended {
+            return None;
+        }
+        let mut frame = None;
+        while self
+            .video
+            .front()
+            .is_some_and(|video| video.pts <= self.position)
+        {
+            frame = self.video.pop_front();
+        }
+        frame
+    }
+
+    fn finish(&mut self, close_on_end: bool) -> Result<bool, String> {
+        if !self.eof || !self.video.is_empty() || self.ended {
+            return Ok(false);
+        }
+        if !self.started {
+            return Err("file contains no decodable video frames".into());
+        }
+        if let Some(target) = self.seek_target.take() {
+            if matches!(target, Target::Last) {
+                self.position = self.duration().unwrap_or(self.position);
+                self.ended = true;
+                self.redraw = true;
+                return Ok(false);
+            }
+            self.clock.set(self.position);
+        }
+        if self.paused
+            || self.position < self.frame_end
+            || self
+                .audio
+                .as_ref()
+                .is_some_and(|device| device.queued() > 0)
+        {
+            return Ok(false);
+        }
+        if let Some(audio) = &self.audio
+            && self.audio_tail.is_some()
+            && self
+                .audio_drained_at
+                .is_some_and(|time| time.elapsed().as_micros() < audio.latency() as u128)
+        {
+            return Ok(false);
+        }
+        self.ended = true;
+        self.position = self.duration().unwrap_or(self.position);
+        self.redraw = true;
+        Ok(close_on_end)
+    }
 }

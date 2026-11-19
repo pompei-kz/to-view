@@ -94,24 +94,27 @@ fi
 
 tar xf ffmpeg-7.1.1.tar.xz
 cd ffmpeg-7.1.1
-patch --silent -p1 < "$script_dir/ffplay-exit-status.patch"
-patch --silent -p1 < "$script_dir/ffplay-menu.patch"
-patch --silent -p1 < "$script_dir/ffplay-seekbar.patch"
-patch --silent -p1 < "$script_dir/ffplay-window-geometry.patch"
-cp "$script_dir/ffplay-seekbar.h" fftools/to_view_seekbar.h
-PKG_CONFIG_PATH="$prefix/lib/pkgconfig" ./configure \
-    --disable-autodetect --enable-sdl2 --enable-static --disable-shared \
-    --disable-ffmpeg --disable-ffprobe --enable-ffplay --disable-doc \
+./configure \
+    --disable-autodetect --enable-static --disable-shared \
+    --disable-programs --disable-doc --disable-avfilter \
     --disable-network --disable-avdevice --disable-postproc --disable-x86asm \
-    --pkg-config-flags=--static --extra-ldflags="-static -L$xlib" \
-    --extra-libs="-lxcb -lXau -lXdmcp" \
     --disable-everything --enable-protocol=file \
     --enable-demuxer=mov,matroska,avi,mpegts \
     --enable-decoder=h264,hevc,av1,mpeg4,vp8,vp9,mpeg2video,aac,mp3,opus,vorbis,ac3,alac,flac,pcm_s16le \
-    --enable-parser=h264,hevc,av1,vp8,vp9,mpeg4video,mpegvideo,aac,mpegaudio,opus,ac3 \
-    --enable-filter=buffer,buffersink,abuffer,abuffersink,aformat,aresample,format,scale,transpose,hflip,vflip,rotate
-make -j"$jobs" fftools/{ffplay,ffplay_renderer,cmdutils,opt_common}.o \
-    libavformat/libavformat.a libavcodec/libavcodec.a libavfilter/libavfilter.a \
+    --enable-parser=h264,hevc,av1,vp8,vp9,mpeg4video,mpegvideo,aac,mpegaudio,opus,ac3
+make -j"$jobs" libavformat/libavformat.a libavcodec/libavcodec.a \
     libswresample/libswresample.a libswscale/libswscale.a libavutil/libavutil.a
-objcopy --redefine-sym main=to_view_ffplay_main fftools/ffplay.o "$out/ffplay-entry.o"
-ar crs "$out/libffplay.a" "$out/ffplay-entry.o" fftools/{ffplay_renderer,cmdutils,opt_common}.o
+
+
+# Run bindgen as a build-time tool so libclang is never loaded by the player.
+bindgen=${TO_VIEW_BINDGEN:-"$out/bindgen-tool/bin/bindgen"}
+if [[ ! -x "$bindgen" ]]; then
+    RUSTFLAGS='' CARGO_ENCODED_RUSTFLAGS='' cargo install --locked --version 0.72.1 \
+        --target-dir "$out/bindgen-build" --root "$out/bindgen-tool" bindgen-cli
+fi
+"$bindgen" "$script_dir/native-bindings.h" --no-layout-tests --no-doc-comments --formatter=none \
+    --allowlist-function '(av|swr|sws|SDL_).*' --allowlist-type 'AV.*|SDL_.*|Sw[rs].*' \
+    --allowlist-var 'AV.*|SDL_.*|SWS_.*|AUDIO_.*|KMOD_.*|SDLK_.*' \
+    --output "$out/bindings.rs" -- -I"$PWD" -I"$prefix/include/SDL2"
+# Always emit Rust 2024 extern blocks, even with alternate bindgen binaries.
+sed -Ei 's/(unsafe )?extern "C" \{/unsafe extern "C" {/g' "$out/bindings.rs"
