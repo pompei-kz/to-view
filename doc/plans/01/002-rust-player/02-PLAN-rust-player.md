@@ -1,3 +1,5 @@
+Статус: исполнен
+
 # Перенос движка to-view на Rust
 
 Исходный запрос — [01-prompt-rust-player.txt](01-prompt-rust-player.txt).

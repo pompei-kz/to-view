@@ -4,6 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+fontdue = "0.9.3"
 futures = { version = "0.3.34", default-features = false, features = ["executor"] }
 pulseaudio = "0.3.1"
 sha2 = "0.10"

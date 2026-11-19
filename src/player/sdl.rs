@@ -23,9 +23,9 @@ pub use super::ffi::{
 };
 
 use super::ffi::{
-  SDL_EventType_SDL_KEYDOWN as KEY_DOWN, SDL_EventType_SDL_MOUSEBUTTONDOWN as MOUSE_DOWN,
-  SDL_EventType_SDL_MOUSEMOTION as MOUSE_MOTION, SDL_EventType_SDL_QUIT as QUIT,
-  SDL_EventType_SDL_WINDOWEVENT as WINDOW_EVENT,
+  SDL_EventType_SDL_KEYDOWN as KEY_DOWN, SDL_EventType_SDL_KEYMAPCHANGED as KEYMAP_CHANGED,
+  SDL_EventType_SDL_MOUSEBUTTONDOWN as MOUSE_DOWN, SDL_EventType_SDL_MOUSEMOTION as MOUSE_MOTION,
+  SDL_EventType_SDL_QUIT as QUIT, SDL_EventType_SDL_WINDOWEVENT as WINDOW_EVENT,
 };
 
 pub const LEFT_BUTTON: u8 = SDL_BUTTON_LEFT as u8;
@@ -76,6 +76,8 @@ pub struct Ui {
   renderer: *mut SDL_Renderer,
   menu: *mut SDL_Texture,
   menu_size: (i32, i32),
+  menu_key: i32,
+  menu_font: fontdue::Font,
   video: *mut SDL_Texture,
   video_size: (i32, i32),
   geometry: Geometry,
@@ -119,21 +121,18 @@ impl Ui {
         SDL_SetWindowIcon(window, icon);
         SDL_FreeSurface(icon);
       }
-      let surface = load_bmp(include_bytes!("../../assets/menu-label.bmp"));
-      let mut menu_size = (0, 0);
-      let menu = if surface.is_null() {
-        ptr::null_mut()
-      } else {
-        menu_size = ((*surface).w, (*surface).h);
-        let texture = SDL_CreateTextureFromSurface(renderer, surface);
-        SDL_FreeSurface(surface);
-        texture
-      };
+      let menu_font = fontdue::Font::from_bytes(
+        include_bytes!("../../assets/DejaVuSans.ttf") as &[u8],
+        fontdue::FontSettings::default(),
+      )
+      .map_err(|error| format!("load menu font: {error}"))?;
       Ok(Self {
         window,
         renderer,
-        menu,
-        menu_size,
+        menu: ptr::null_mut(),
+        menu_size: (0, 0),
+        menu_key: -1,
+        menu_font,
         video: ptr::null_mut(),
         video_size: (0, 0),
         geometry,
@@ -261,6 +260,7 @@ impl Ui {
               repeat: key.repeat != 0,
             });
           }
+          KEYMAP_CHANGED => return Some(Event::Redraw),
           MOUSE_DOWN => {
             let button = event.button;
             return Some(Event::Mouse {
@@ -409,10 +409,14 @@ impl Ui {
     }
   }
 
-  pub fn menu(&self) {
+  pub fn menu(&mut self) {
+    let key = unsafe { SDL_GetKeyFromScancode(Q) };
+    if self.menu_key != key {
+      self.update_menu(key);
+    }
     let (width, _) = self.size();
     let (menu_w, menu_h) = self.menu_size;
-    if width <= 24 || self.menu.is_null() {
+    if width <= 24 || self.menu.is_null() || menu_w <= 0 {
       return;
     }
     let w = menu_w.min(width - 24);
@@ -423,6 +427,96 @@ impl Ui {
       h: (menu_h * w / menu_w).max(1),
     };
     unsafe { SDL_RenderCopy(self.renderer, self.menu, ptr::null(), &dst) };
+  }
+
+  fn update_menu(&mut self, key: i32) {
+    use fontdue::layout::{CoordinateSystem, Layout, LayoutSettings, TextStyle};
+
+    let label = char::from_u32(key as u32)
+      .filter(|ch| !ch.is_control())
+      .map(|ch| ch.to_uppercase().collect::<String>())
+      .unwrap_or_else(|| "Q".to_owned());
+    let text = format!("Esc - выход из режима меню, {label} - выход");
+    let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
+    layout.reset(&LayoutSettings::default());
+    layout.append(&[&self.menu_font], &TextStyle::new(&text, 18.0, 0));
+
+    let width = layout
+      .glyphs()
+      .iter()
+      .map(|g| g.x.ceil() as i32 + g.width as i32)
+      .max()
+      .unwrap_or(0)
+      + 4;
+    let height = layout
+      .glyphs()
+      .iter()
+      .map(|g| g.y.ceil() as i32 + g.height as i32)
+      .max()
+      .unwrap_or(0)
+      + 4;
+    if width <= 0 || height <= 0 {
+      return;
+    }
+    let mut mask = vec![0u8; width as usize * height as usize];
+    for glyph in layout.glyphs() {
+      let (_, bitmap) = self.menu_font.rasterize_config(glyph.key);
+      for row in 0..glyph.height {
+        for col in 0..glyph.width {
+          let x = glyph.x as i32 + col as i32 + 2;
+          let y = glyph.y as i32 + row as i32 + 2;
+          if (0..width).contains(&x) && (0..height).contains(&y) {
+            let index = (y * width + x) as usize;
+            mask[index] = mask[index].max(bitmap[row * glyph.width + col]);
+          }
+        }
+      }
+    }
+    let mut pixels = vec![0u8; mask.len() * 4];
+    for y in 0..height {
+      for x in 0..width {
+        let index = (y * width + x) as usize;
+        let mut outline = 0;
+        for dy in -1..=1 {
+          for dx in -1..=1 {
+            let (nx, ny) = (x + dx, y + dy);
+            if (0..width).contains(&nx) && (0..height).contains(&ny) {
+              outline = outline.max(mask[(ny * width + nx) as usize]);
+            }
+          }
+        }
+        let foreground = mask[index] as u16;
+        let alpha = outline.max(mask[index]) as u16;
+        if alpha > 0 {
+          let shade = (foreground * 255 / alpha) as u8;
+          pixels[index * 4..index * 4 + 4].copy_from_slice(&[shade, shade, shade, alpha as u8]);
+        }
+      }
+    }
+    unsafe {
+      let texture = SDL_CreateTexture(
+        self.renderer,
+        RGBA,
+        SDL_TextureAccess_SDL_TEXTUREACCESS_STATIC as i32,
+        width,
+        height,
+      );
+      if texture.is_null() {
+        return;
+      }
+      if SDL_SetTextureBlendMode(texture, SDL_BlendMode_SDL_BLENDMODE_BLEND) != 0
+        || SDL_UpdateTexture(texture, ptr::null(), pixels.as_ptr().cast(), width * 4) != 0
+      {
+        SDL_DestroyTexture(texture);
+        return;
+      }
+      if !self.menu.is_null() {
+        SDL_DestroyTexture(self.menu);
+      }
+      self.menu = texture;
+      self.menu_size = (width, height);
+      self.menu_key = key;
+    }
   }
 
   pub fn color(&self, (r, g, b): (u8, u8, u8)) {

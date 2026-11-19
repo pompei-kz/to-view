@@ -1,3 +1,5 @@
+Статус: исполнен
+
 # Seekbar в режиме меню
 
 Исходное задание — [01-prompt-seekbar.txt](01-prompt-seekbar.txt). Уточнение высоты — [02-prompt-seekbar-height.txt](02-prompt-seekbar-height.txt).

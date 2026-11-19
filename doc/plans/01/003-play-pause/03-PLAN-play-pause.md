@@ -1,3 +1,5 @@
+Статус: не исполнен
+
 # Кнопка воспроизведения и паузы
 
 Исходное задание — [01-prompt-play-pause.txt](01-prompt-play-pause.txt). Уточнение управления мышью — [02-prompt-mouse-controls.txt](02-prompt-mouse-controls.txt).
