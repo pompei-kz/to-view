@@ -2,4 +2,8 @@
 
 .PHONY: compile
 compile:
-	cargo build --release
+	cargo build -vvv --release
+
+.PHONY: clean
+clean:
+	cargo clean
