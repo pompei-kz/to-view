@@ -259,6 +259,10 @@ impl Decoder {
         "configure decoder",
       )?;
       (*raw.as_ptr()).pkt_timebase = stream.time_base;
+      // libavcodec defaults to one decoding thread when used directly. Let the
+      // codec select a suitable thread count so complex HD frames cannot drain
+      // the short playback queues while one CPU core catches up.
+      (*raw.as_ptr()).thread_count = 0;
       check(
         avcodec_open2(raw.as_ptr(), codec, ptr::null_mut()),
         "open decoder",

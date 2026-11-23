@@ -26,6 +26,9 @@ use std::{
   time::{Duration, Instant},
 };
 
+const VIDEO_QUEUE_FRAMES: usize = 16;
+const AUDIO_QUEUE_MICROS: i64 = 500_000;
+
 pub struct Options {
   pub path: PathBuf,
   pub close_on_end: bool,
@@ -694,7 +697,7 @@ impl Playback {
             }
           }
         }
-        Event::Video(frame) if self.video.len() >= 4 => {
+        Event::Video(frame) if self.video.len() >= VIDEO_QUEUE_FRAMES => {
           self.deferred = Some(Message {
             event: Event::Video(frame),
             ..message
@@ -703,10 +706,11 @@ impl Playback {
         }
         Event::Video(frame) => self.video.push_back(frame),
         Event::Audio(audio)
-          if self
-            .audio
-            .as_ref()
-            .is_some_and(|device| device.queued() > 80_000) =>
+          if self.metadata.as_ref().is_some_and(|media| !media.has_video)
+            && self
+              .audio
+              .as_ref()
+              .is_some_and(|device| device.queued() > AUDIO_QUEUE_MICROS) =>
         {
           if self.seek_target.is_none() && self.started {
             self.deferred = Some(Message {
