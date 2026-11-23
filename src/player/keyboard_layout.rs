@@ -132,6 +132,22 @@ impl KeyboardLayout {
     changed
   }
 
+  pub fn physical_key(&self, letter: u8, fallback: u8) -> Option<i32> {
+    unsafe {
+      let mut state = State::default();
+      if XkbGetState(self.display, CORE_KEYBOARD, &mut state) != 0 {
+        return None;
+      }
+      let mut code = XKeysymToKeycode(self.display, c_ulong::from(letter));
+      if code == 0 {
+        code = fallback;
+      }
+      let symbol = XkbKeycodeToKeysym(self.display, code, state.group.into(), 0);
+      let unicode = SDL_KeySymToUcs4(symbol as u32);
+      (unicode != 0).then_some(unicode as i32)
+    }
+  }
+
   pub fn key(&self, menu: bool) -> Option<i32> {
     unsafe {
       let mut state = State::default();

@@ -5,6 +5,7 @@ mod media;
 mod platform;
 mod sdl;
 mod seekbar;
+mod settings;
 mod visualizer;
 
 use crate::window_geometry::Geometry;
@@ -56,7 +57,7 @@ pub fn play(options: Options) -> Result<u8, String> {
     .map_err(|e| {
       crate::i18n::format("start media decoder: {error}", &[("error", &e.to_string())])
     })?;
-  let mut playback = Playback::new(requested, seek_tx, event_rx);
+  let mut playback = Playback::new(requested, seek_tx, event_rx, path);
   let result = playback.run(&mut ui, options.close_on_end);
   playback.requested.store(media::STOP, Ordering::Release);
   drop(playback);
@@ -108,15 +109,24 @@ struct Playback {
   ended: bool,
   stepping: bool,
   menu: bool,
+  extended_menu: bool,
   redraw: bool,
-  volume: f32,
-  muted: bool,
+  settings: settings::Settings,
+  media_path: PathBuf,
+  displayed_video: Option<media::Video>,
+  picture_dirty: bool,
   visualization: visualizer::Mode,
   samples: Vec<f32>,
 }
 
 impl Playback {
-  fn new(requested: Arc<AtomicU64>, commands: Sender<Seek>, events: Receiver<Message>) -> Self {
+  fn new(
+    requested: Arc<AtomicU64>,
+    commands: Sender<Seek>,
+    events: Receiver<Message>,
+    media_path: PathBuf,
+  ) -> Self {
+    let settings = settings::Settings::load(&media_path);
     Self {
       requested,
       commands,
@@ -144,9 +154,12 @@ impl Playback {
       ended: false,
       stepping: false,
       menu: false,
+      extended_menu: false,
       redraw: true,
-      volume: 1.0,
-      muted: false,
+      settings,
+      media_path,
+      displayed_video: None,
+      picture_dirty: false,
       visualization: visualizer::Mode::Video,
       samples: Vec::new(),
     }
@@ -179,11 +192,13 @@ impl Playback {
             (display_width, frame.height)
           };
         ui.show(Some(size));
-        ui.upload(&frame)?;
+        ui.upload(&frame, self.settings.picture)?;
+        self.picture_dirty = false;
         self.aspect = frame.aspect;
         self.displayed_frame = Some(frame.pts);
         self.frame_number = Some(frame.number);
         self.frame_end = frame.pts.saturating_add(frame.duration);
+        self.displayed_video = Some(frame);
         self.redraw = true;
       }
       if self.metadata.as_ref().is_some_and(|media| !media.has_video)
@@ -193,6 +208,12 @@ impl Playback {
       }
       if self.finish(close_on_end)? {
         return Ok(());
+      }
+      if self.picture_dirty {
+        if let Some(frame) = &self.displayed_video {
+          ui.upload(frame, self.settings.picture)?;
+        }
+        self.picture_dirty = false;
       }
       if self.redraw {
         if self.visualization == visualizer::Mode::Video {
@@ -206,6 +227,7 @@ impl Playback {
         }
         if self.menu {
           ui.menu(self.frame_number);
+          ui.extended_menu(self.extended_menu, self.settings);
           seekbar::draw(
             ui,
             self.display_position(),
@@ -222,6 +244,59 @@ impl Playback {
 
   fn input(&mut self, ui: &mut sdl::Ui, event: sdl::Event) -> bool {
     self.redraw = true;
+    if let sdl::Event::Key {
+      scan, repeat, mods, ..
+    } = &event
+    {
+      let (scan, repeat) = (*scan, *repeat);
+      if scan == sdl::SCAN_S {
+        if !repeat {
+          self.extended_menu = !self.extended_menu;
+        }
+        return false;
+      }
+      if *mods & (sdl::CTRL | sdl::ALT) == 0 {
+        let before = self.settings;
+        if (sdl::SCAN_1..=sdl::SCAN_8).contains(&scan) {
+          let n = scan - sdl::SCAN_1;
+          let step = if n % 2 == 0 { -1 } else { 1 };
+          let field = match n / 2 {
+            0 => &mut self.settings.picture.brightness,
+            1 => &mut self.settings.picture.contrast,
+            2 => &mut self.settings.picture.gamma,
+            _ => &mut self.settings.picture.saturation,
+          };
+          *field = (*field + step).clamp(-100, 100);
+        } else if scan == sdl::SCAN_X || scan == sdl::SCAN_VOLUMEDOWN {
+          self.settings.volume = (self.settings.volume - 25).max(0);
+        } else if scan == sdl::SCAN_C || scan == sdl::SCAN_VOLUMEUP {
+          self.settings.volume = (self.settings.volume + 25).min(1000);
+        } else if scan == sdl::SCAN_Z || scan == sdl::SCAN_MUTE || scan == sdl::SCAN_AUDIO_MUTE {
+          if !repeat {
+            self.settings.muted = !self.settings.muted;
+          }
+        } else { /* process other shortcuts below */
+        }
+        if self.settings != before {
+          self.picture_dirty |= self.settings.picture != before.picture;
+          self.save_settings();
+        }
+        if (sdl::SCAN_1..=sdl::SCAN_8).contains(&scan)
+          || [
+            sdl::SCAN_X,
+            sdl::SCAN_C,
+            sdl::SCAN_Z,
+            sdl::SCAN_VOLUMEUP,
+            sdl::SCAN_VOLUMEDOWN,
+            sdl::SCAN_MUTE,
+            sdl::SCAN_AUDIO_MUTE,
+          ]
+          .contains(&scan)
+        {
+          return false;
+        }
+      }
+    }
     match event {
       sdl::Event::Quit => return true,
       sdl::Event::Key { scan: sdl::Q, .. } => return true,
@@ -242,7 +317,10 @@ impl Playback {
       } => match code as u32 {
         sdl::ESC if !repeat => self.menu = !self.menu,
         sdl::SPACE | sdl::P if !repeat => self.pause(!self.paused),
-        sdl::M if !repeat => self.muted = !self.muted,
+        sdl::M if !repeat => {
+          self.settings.muted = !self.settings.muted;
+          self.save_settings();
+        }
         sdl::W if !repeat => {
           if let Some(media) = &self.metadata
             && media.has_audio
@@ -250,11 +328,13 @@ impl Playback {
             self.visualization = self.visualization.next(media.has_video);
           }
         }
-        sdl::ZERO | sdl::KP_MULTIPLY => self.volume = (self.volume + 0.1).min(1.0),
-        sdl::NINE | sdl::KP_DIVIDE => self.volume = (self.volume - 0.1).max(0.0),
-        sdl::S if !repeat && !self.ended => {
-          self.pause(true);
-          self.stepping = true;
+        sdl::KP_MULTIPLY => {
+          self.settings.volume = (self.settings.volume + 25).min(1000);
+          self.save_settings();
+        }
+        sdl::NINE | sdl::KP_DIVIDE => {
+          self.settings.volume = (self.settings.volume - 25).max(0);
+          self.save_settings();
         }
         sdl::HOME => self.seek(Target::First),
         sdl::END => self.seek(Target::Last),
@@ -288,7 +368,7 @@ impl Playback {
         sdl::PAGE_DOWN => self.chapter(false),
         sdl::PAGE_UP => self.chapter(true),
         sdl::A if !repeat => self.cycle_tracks(true, false),
-        sdl::C if !repeat => self.cycle_tracks(true, true),
+        sdl::C if !repeat && mods & sdl::CTRL != 0 => self.cycle_tracks(true, true),
         _ => {}
       },
       sdl::Event::Mouse {
@@ -298,7 +378,9 @@ impl Playback {
         clicks,
       } => {
         let (x, y) = ui.render_point(x, y);
-        if self.menu && seekbar::is_button(ui, x, y) {
+        if self.menu && ui.extended_button_hit(x, y) {
+          self.extended_menu = !self.extended_menu;
+        } else if self.menu && seekbar::is_button(ui, x, y) {
           self.toggle_playback();
         } else if self.menu
           && let Some(fraction) = seekbar::fraction(ui, x, y)
@@ -320,6 +402,24 @@ impl Playback {
       _ => {}
     }
     false
+  }
+
+  fn save_settings(&self) {
+    if let Err(error) = self.settings.save(&self.media_path) {
+      let path = crate::window_geometry::directory(&self.media_path, "toview")
+        .map(|dir| dir.join("playback/settings.txt"))
+        .unwrap_or_else(|| self.media_path.clone());
+      eprintln!(
+        "toview: {}",
+        crate::i18n::format(
+          "could not save {path}: {error}",
+          &[
+            ("path", &path.display().to_string()),
+            ("error", &error.to_string())
+          ]
+        )
+      );
+    }
   }
 
   fn toggle_playback(&mut self) {
@@ -500,7 +600,7 @@ impl Playback {
           if self
             .audio
             .as_ref()
-            .is_some_and(|device| device.queued() > 450_000) =>
+            .is_some_and(|device| device.queued() > 80_000) =>
         {
           if self.seek_target.is_none() && self.started {
             self.deferred = Some(Message {
@@ -548,7 +648,11 @@ impl Playback {
     let Some(device) = &self.audio else {
       return Ok(());
     };
-    let gain = if self.muted { 0.0 } else { self.volume };
+    let gain = if self.settings.muted {
+      0.0
+    } else {
+      self.settings.volume as f32 / 1000.0
+    };
     if gain != 1.0 {
       for sample in &mut audio.samples {
         *sample *= gain;

@@ -169,3 +169,24 @@ msgstr "PulseAudio ағынын ашу мүмкін болмады: {error}"
 msgid "{count} frame"
 msgid_plural "{count} frames"
 msgstr[0] "{count} кадр"
+
+msgid "Brightness: 1 - {value} + 2"
+msgstr "Жарықтық: 1 - {value} + 2"
+
+msgid "Contrast: 3 - {value} + 4"
+msgstr "Контраст: 3 - {value} + 4"
+
+msgid "Gamma: 5 - {value} + 6"
+msgstr "Гамма: 5 - {value} + 6"
+
+msgid "Saturation: 7 - {value} + 8"
+msgstr "Қанықтық: 7 - {value} + 8"
+
+msgid "Volume: {down} - {volume}% + {up}"
+msgstr "Дыбыс деңгейі: {down} - {volume}% + {up}"
+
+msgid "{key} - enable sound"
+msgstr "{key} - дыбысты қосу"
+
+msgid "{key} - mute sound"
+msgstr "{key} - дыбысты өшіру"

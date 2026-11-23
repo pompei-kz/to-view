@@ -171,3 +171,24 @@ msgid_plural "{count} frames"
 msgstr[0] "{count} кадр"
 msgstr[1] "{count} кадра"
 msgstr[2] "{count} кадров"
+
+msgid "Brightness: 1 - {value} + 2"
+msgstr "Яркость: 1 - {value} + 2"
+
+msgid "Contrast: 3 - {value} + 4"
+msgstr "Контрастность: 3 - {value} + 4"
+
+msgid "Gamma: 5 - {value} + 6"
+msgstr "Гамма: 5 - {value} + 6"
+
+msgid "Saturation: 7 - {value} + 8"
+msgstr "Насыщенность: 7 - {value} + 8"
+
+msgid "Volume: {down} - {volume}% + {up}"
+msgstr "Громкость: {down} - {volume}% + {up}"
+
+msgid "{key} - enable sound"
+msgstr "{key} - включить звук"
+
+msgid "{key} - mute sound"
+msgstr "{key} - выключить звук"

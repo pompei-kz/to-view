@@ -170,3 +170,24 @@ msgid "{count} frame"
 msgid_plural "{count} frames"
 msgstr[0] "{count} frame"
 msgstr[1] "{count} frames"
+
+msgid "Brightness: 1 - {value} + 2"
+msgstr "Brightness: 1 - {value} + 2"
+
+msgid "Contrast: 3 - {value} + 4"
+msgstr "Contrast: 3 - {value} + 4"
+
+msgid "Gamma: 5 - {value} + 6"
+msgstr "Gamma: 5 - {value} + 6"
+
+msgid "Saturation: 7 - {value} + 8"
+msgstr "Saturation: 7 - {value} + 8"
+
+msgid "Volume: {down} - {volume}% + {up}"
+msgstr "Volume: {down} - {volume}% + {up}"
+
+msgid "{key} - enable sound"
+msgstr "{key} - enable sound"
+
+msgid "{key} - mute sound"
+msgstr "{key} - mute sound"

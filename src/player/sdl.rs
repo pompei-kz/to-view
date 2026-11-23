@@ -16,10 +16,9 @@ pub use super::ffi::{
 };
 
 pub use super::ffi::{
-  SDL_KeyCode_SDLK_0 as ZERO, SDL_KeyCode_SDLK_9 as NINE, SDL_KeyCode_SDLK_KP_DIVIDE as KP_DIVIDE,
+  SDL_KeyCode_SDLK_9 as NINE, SDL_KeyCode_SDLK_KP_DIVIDE as KP_DIVIDE,
   SDL_KeyCode_SDLK_KP_MULTIPLY as KP_MULTIPLY, SDL_KeyCode_SDLK_a as A, SDL_KeyCode_SDLK_c as C,
-  SDL_KeyCode_SDLK_m as M, SDL_KeyCode_SDLK_p as P, SDL_KeyCode_SDLK_s as S,
-  SDL_KeyCode_SDLK_w as W,
+  SDL_KeyCode_SDLK_m as M, SDL_KeyCode_SDLK_p as P, SDL_KeyCode_SDLK_w as W,
 };
 
 use super::ffi::{
@@ -37,6 +36,16 @@ pub const ALT: u16 = SDL_Keymod_KMOD_ALT as u16;
 pub const Q: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Q;
 pub const F: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_F;
 pub const V: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_V;
+pub const SCAN_S: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_S;
+pub const SCAN_X: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_X;
+pub const SCAN_C: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_C;
+pub const SCAN_Z: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Z;
+pub const SCAN_1: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_1;
+pub const SCAN_8: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_8;
+pub const SCAN_VOLUMEUP: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_VOLUMEUP;
+pub const SCAN_VOLUMEDOWN: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_VOLUMEDOWN;
+pub const SCAN_MUTE: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_MUTE;
+pub const SCAN_AUDIO_MUTE: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_AUDIOMUTE;
 
 #[cfg(target_endian = "little")]
 const RGBA: u32 = SDL_PixelFormatEnum_SDL_PIXELFORMAT_ABGR8888;
@@ -352,7 +361,12 @@ impl Ui {
     (scale(x, window_w, w), scale(y, window_h, h))
   }
 
-  pub fn upload(&mut self, frame: &media::Video) -> Result<(), String> {
+  pub fn upload(
+    &mut self,
+    frame: &media::Video,
+    picture: super::settings::PictureSettings,
+  ) -> Result<(), String> {
+    let pixels = picture.apply(&frame.pixels);
     unsafe {
       if self.video_size != (frame.width, frame.height) {
         if !self.video.is_null() {
@@ -373,7 +387,7 @@ impl Ui {
       if SDL_UpdateTexture(
         self.video,
         ptr::null(),
-        frame.pixels.as_ptr().cast(),
+        pixels.as_ptr().cast(),
         frame.width * 4,
       ) != 0
       {
@@ -439,10 +453,10 @@ impl Ui {
     }
     let (width, _) = self.size();
     let (menu_w, menu_h) = self.menu_size;
-    if width <= 24 || self.menu.is_null() || menu_w <= 0 {
+    if width <= 74 || self.menu.is_null() || menu_w <= 0 {
       return;
     }
-    let w = menu_w.min(width - 24);
+    let w = menu_w.min(width - 74);
     let dst = Rect {
       x: 12,
       y: 12,
@@ -453,8 +467,6 @@ impl Ui {
   }
 
   fn update_menu(&mut self, key: i32, toggle_key: i32, frame: Option<u64>) {
-    use fontdue::layout::{CoordinateSystem, Layout, LayoutSettings, TextStyle};
-
     let label = char::from_u32(key as u32)
       .filter(|ch| !ch.is_control())
       .map(|ch| ch.to_uppercase().collect::<String>())
@@ -473,6 +485,22 @@ impl Ui {
       crate::i18n::tr("Ctrl+Left / Ctrl+Right - frame by frame"),
       crate::i18n::format("Frame: {frame}", &[("frame", &frame)]),
     );
+    if let Some((texture, width, height)) = self.text_texture(&text) {
+      unsafe {
+        if !self.menu.is_null() {
+          SDL_DestroyTexture(self.menu);
+        }
+      }
+      self.menu = texture;
+      self.menu_size = (width, height);
+      self.menu_key = key;
+      self.menu_toggle_key = toggle_key;
+      self.menu_frame = frame.parse().ok();
+    }
+  }
+
+  fn text_texture(&self, text: &str) -> Option<(*mut SDL_Texture, i32, i32)> {
+    use fontdue::layout::{CoordinateSystem, Layout, LayoutSettings, TextStyle};
     let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
     layout.reset(&LayoutSettings::default());
     let fonts = [&self.menu_font, &self.fallback_font];
@@ -501,7 +529,7 @@ impl Ui {
       .unwrap_or(0)
       + 4;
     if width <= 0 || height <= 0 {
-      return;
+      return None;
     }
     let mut mask = vec![0u8; width as usize * height as usize];
     for glyph in layout.glyphs() {
@@ -547,22 +575,165 @@ impl Ui {
         height,
       );
       if texture.is_null() {
-        return;
+        return None;
       }
       if SDL_SetTextureBlendMode(texture, SDL_BlendMode_SDL_BLENDMODE_BLEND) != 0
         || SDL_UpdateTexture(texture, ptr::null(), pixels.as_ptr().cast(), width * 4) != 0
       {
         SDL_DestroyTexture(texture);
-        return;
+        return None;
       }
-      if !self.menu.is_null() {
-        SDL_DestroyTexture(self.menu);
+      Some((texture, width, height))
+    }
+  }
+
+  fn key_label(&self, scan: SDL_Scancode, letter: u8, xcode: u8) -> String {
+    let key = self
+      .keyboard_layout
+      .as_ref()
+      .and_then(|layout| layout.physical_key(letter, xcode))
+      .unwrap_or_else(|| unsafe { SDL_GetKeyFromScancode(scan) });
+    char::from_u32(key as u32)
+      .filter(|ch| !ch.is_control())
+      .map(|ch| ch.to_uppercase().collect())
+      .unwrap_or_else(|| (letter as char).to_ascii_uppercase().to_string())
+  }
+
+  pub fn extended_button_hit(&self, x: i32, y: i32) -> bool {
+    let (w, _) = self.size();
+    x >= (w - 62).max(0) && x < w && (0..58).contains(&y)
+  }
+
+  fn draw_text(&self, text: &str, x: i32, y: i32, max_width: i32) -> i32 {
+    if max_width <= 0 {
+      return 0;
+    }
+    if let Some((texture, width, height)) = self.text_texture(text) {
+      let visible = width.min(max_width);
+      let src = Rect {
+        x: 0,
+        y: 0,
+        w: visible,
+        h: height,
+      };
+      let dst = Rect {
+        x,
+        y,
+        w: visible,
+        h: height,
+      };
+      unsafe {
+        SDL_RenderCopy(self.renderer, texture, &src, &dst);
+        SDL_DestroyTexture(texture);
       }
-      self.menu = texture;
-      self.menu_size = (width, height);
-      self.menu_key = key;
-      self.menu_toggle_key = toggle_key;
-      self.menu_frame = frame.parse().ok();
+      height
+    } else {
+      0
+    }
+  }
+
+  fn draw_text_right(&self, text: &str, right: i32, y: i32, max_width: i32) {
+    if max_width <= 0 {
+      return;
+    }
+    if let Some((texture, width, height)) = self.text_texture(text) {
+      let visible = width.min(max_width);
+      let src = Rect {
+        x: 0,
+        y: 0,
+        w: visible,
+        h: height,
+      };
+      let dst = Rect {
+        x: right - visible,
+        y,
+        w: visible,
+        h: height,
+      };
+      unsafe {
+        SDL_RenderCopy(self.renderer, texture, &src, &dst);
+        SDL_DestroyTexture(texture);
+      }
+    }
+  }
+
+  pub fn extended_menu(&self, extended: bool, settings: super::settings::Settings) {
+    let (width, height) = self.size();
+    if width < 24 {
+      return;
+    }
+    let x = (width - 46).max(1);
+    self.color((0, 0, 0));
+    for y in [18, 28, 38] {
+      for d in -1..=1 {
+        self.line(x, y + d, x + 32, y + d);
+      }
+    }
+    self.color((255, 255, 255));
+    for y in [18, 28, 38] {
+      self.line(x, y, x + 32, y);
+    }
+    let label = self.key_label(SCAN_S, b's', 39);
+    self.draw_text(&label, x + 9, 18, 26);
+    if !extended {
+      return;
+    }
+    let picture = settings.picture;
+    let xkey = self.key_label(SCAN_X, b'x', 53);
+    let ckey = self.key_label(SCAN_C, b'c', 54);
+    let zkey = self.key_label(SCAN_Z, b'z', 52);
+    let left = [
+      crate::i18n::format(
+        "Brightness: 1 - {value} + 2",
+        &[("value", &picture.brightness.to_string())],
+      ),
+      crate::i18n::format(
+        "Contrast: 3 - {value} + 4",
+        &[("value", &picture.contrast.to_string())],
+      ),
+      crate::i18n::format(
+        "Gamma: 5 - {value} + 6",
+        &[("value", &picture.gamma.to_string())],
+      ),
+      crate::i18n::format(
+        "Saturation: 7 - {value} + 8",
+        &[("value", &picture.saturation.to_string())],
+      ),
+    ];
+    let right = [
+      crate::i18n::format(
+        "Volume: {down} - {volume}% + {up}",
+        &[
+          ("down", &xkey),
+          ("volume", &settings.volume_text()),
+          ("up", &ckey),
+        ],
+      ),
+      crate::i18n::format(
+        if settings.muted {
+          "{key} - enable sound"
+        } else {
+          "{key} - mute sound"
+        },
+        &[("key", &zkey)],
+      ),
+    ];
+    let start_y = 95;
+    let narrow = width < 700;
+    let right_x = if narrow { 12 } else { width / 2 + 8 };
+    let right_y = if narrow { start_y + 4 * 25 } else { start_y };
+    let left_width = if narrow { width - 24 } else { width / 2 - 20 };
+    for (i, line) in left.iter().enumerate() {
+      let y = start_y + i as i32 * 25;
+      if y + 22 < height - 24 {
+        self.draw_text(line, 12, y, left_width);
+      }
+    }
+    for (i, line) in right.iter().enumerate() {
+      let y = right_y + i as i32 * 25;
+      if y + 22 < height - 24 {
+        self.draw_text_right(line, width - 12, y, width - right_x - 12);
+      }
     }
   }
 

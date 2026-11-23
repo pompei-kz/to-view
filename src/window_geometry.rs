@@ -9,7 +9,7 @@ use std::{
   time::{SystemTime, UNIX_EPOCH},
 };
 
-fn directory(path: &Path, application: &str) -> Option<PathBuf> {
+pub fn directory(path: &Path, application: &str) -> Option<PathBuf> {
   let home = PathBuf::from(env::var_os("HOME")?);
   let hash = format!("{:x}", Sha256::digest(path.as_os_str().as_bytes()));
   home.is_absolute().then(|| {
@@ -18,7 +18,6 @@ fn directory(path: &Path, application: &str) -> Option<PathBuf> {
       .join(application)
       .join("saves")
       .join(hash)
-      .join("window")
   })
 }
 
@@ -38,10 +37,10 @@ pub struct Geometry {
 
 impl Geometry {
   pub fn load(path: &Path) -> Self {
-    let Some(dir) = directory(path, "toview") else {
+    let Some(dir) = directory(path, "toview").map(|dir| dir.join("window")) else {
       return Self::default();
     };
-    let legacy = directory(path, "to-view");
+    let legacy = directory(path, "to-view").map(|dir| dir.join("window"));
     let read = |name: &str| {
       let current = dir.join(name);
       if current.exists() {
@@ -59,7 +58,7 @@ impl Geometry {
   }
 
   pub fn save(self, path: &Path) {
-    let Some(dir) = directory(path, "toview") else {
+    let Some(dir) = directory(path, "toview").map(|dir| dir.join("window")) else {
       return;
     };
     if let Err(error) = fs::create_dir_all(&dir) {
