@@ -45,6 +45,7 @@ pub const F: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_F;
 pub const V: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_V;
 pub const SCAN_BACKSPACE: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_BACKSPACE;
 pub const SCAN_S: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_S;
+pub const SCAN_O: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_O;
 pub const SCAN_X: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_X;
 pub const SCAN_C: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_C;
 pub const SCAN_Z: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Z;
@@ -114,6 +115,13 @@ pub struct Ui {
   keyboard_layout: Option<super::keyboard_layout::KeyboardLayout>,
   video: *mut SDL_Texture,
   video_size: (i32, i32),
+  video_pixels: Vec<u8>,
+  video_generation: u64,
+  bicubic: *mut SwsContext,
+  bicubic_video: *mut SDL_Texture,
+  bicubic_size: (i32, i32),
+  bicubic_generation: u64,
+  bicubic_pixels: Vec<u8>,
   geometry: Geometry,
   media_path: PathBuf,
   default_size_pending: bool,
@@ -185,6 +193,13 @@ impl Ui {
         },
         video: ptr::null_mut(),
         video_size: (0, 0),
+        video_pixels: Vec::new(),
+        video_generation: 0,
+        bicubic: ptr::null_mut(),
+        bicubic_video: ptr::null_mut(),
+        bicubic_size: (0, 0),
+        bicubic_generation: 0,
+        bicubic_pixels: Vec::new(),
         geometry,
         media_path,
         default_size_pending: geometry.size.is_none(),
@@ -441,6 +456,9 @@ impl Ui {
     picture: super::settings::PictureSettings,
   ) -> Result<(), String> {
     let pixels = picture.apply(&frame.pixels);
+    self.video_pixels.clear();
+    self.video_pixels.extend_from_slice(&pixels);
+    self.video_generation = self.video_generation.wrapping_add(1);
     unsafe {
       if self.video_size != (frame.width, frame.height) {
         if !self.video.is_null() {
@@ -471,6 +489,86 @@ impl Ui {
     Ok(())
   }
 
+  fn bicubic_texture(&mut self, width: i32, height: i32) -> *mut SDL_Texture {
+    if self.video_pixels.is_empty() || width <= 0 || height <= 0 {
+      return ptr::null_mut();
+    }
+    unsafe {
+      if self.bicubic_size != (width, height) {
+        if !self.bicubic_video.is_null() {
+          SDL_DestroyTexture(self.bicubic_video);
+        }
+        self.bicubic_video = SDL_CreateTexture(
+          self.renderer,
+          RGBA,
+          SDL_TextureAccess_SDL_TEXTUREACCESS_STREAMING as i32,
+          width,
+          height,
+        );
+        if self.bicubic_video.is_null() {
+          self.bicubic_size = (0, 0);
+          return ptr::null_mut();
+        }
+        self.bicubic_size = (width, height);
+        self.bicubic_generation = self.video_generation.wrapping_sub(1);
+      }
+      if self.bicubic_generation == self.video_generation {
+        return self.bicubic_video;
+      }
+      self.bicubic = sws_getCachedContext(
+        self.bicubic,
+        self.video_size.0,
+        self.video_size.1,
+        AVPixelFormat_AV_PIX_FMT_RGBA,
+        width,
+        height,
+        AVPixelFormat_AV_PIX_FMT_RGBA,
+        SWS_BICUBIC as i32,
+        ptr::null_mut(),
+        ptr::null_mut(),
+        ptr::null(),
+      );
+      if self.bicubic.is_null() {
+        return ptr::null_mut();
+      }
+      self
+        .bicubic_pixels
+        .resize(width as usize * height as usize * 4 + 64, 0);
+      let input = [
+        self.video_pixels.as_ptr(),
+        ptr::null(),
+        ptr::null(),
+        ptr::null(),
+      ];
+      let output = [
+        self.bicubic_pixels.as_mut_ptr(),
+        ptr::null_mut(),
+        ptr::null_mut(),
+        ptr::null_mut(),
+      ];
+      if sws_scale(
+        self.bicubic,
+        input.as_ptr(),
+        [self.video_size.0 * 4, 0, 0, 0].as_ptr(),
+        0,
+        self.video_size.1,
+        output.as_ptr(),
+        [width * 4, 0, 0, 0].as_ptr(),
+      ) < 0
+        || SDL_UpdateTexture(
+          self.bicubic_video,
+          ptr::null(),
+          self.bicubic_pixels.as_ptr().cast(),
+          width * 4,
+        ) != 0
+      {
+        return ptr::null_mut();
+      }
+      self.bicubic_generation = self.video_generation;
+      self.bicubic_video
+    }
+  }
+
   pub fn clear(&self) {
     self.color((0, 0, 0));
     unsafe { SDL_RenderClear(self.renderer) };
@@ -480,7 +578,13 @@ impl Ui {
     unsafe { SDL_RenderDrawLine(self.renderer, x, y, next_x, next_y) };
   }
 
-  pub fn background(&self, aspect: f64, rotation: f64, view: super::view::ViewTransform) {
+  pub fn background(
+    &mut self,
+    aspect: f64,
+    rotation: f64,
+    view: super::view::ViewTransform,
+    scaling: super::settings::Scaling,
+  ) {
     self.clear();
     unsafe {
       if self.video.is_null() {
@@ -502,9 +606,37 @@ impl Ui {
         w: (w.round() as i32).max(1),
         h: (h.round() as i32).max(1),
       };
+      let texture = match scaling {
+        super::settings::Scaling::Nearest => {
+          SDL_SetTextureScaleMode(self.video, SDL_ScaleMode_SDL_ScaleModeNearest);
+          self.video
+        }
+        super::settings::Scaling::Linear => {
+          SDL_SetTextureScaleMode(self.video, SDL_ScaleMode_SDL_ScaleModeLinear);
+          self.video
+        }
+        super::settings::Scaling::Bicubic => {
+          // Keep the CPU-scaled texture bounded by the visible output. At high
+          // zoom levels SDL performs only the remaining enlargement, avoiding
+          // multi-gigabyte intermediate textures for mostly off-screen pixels.
+          let (window_w, window_h) = self.size();
+          let scale = 1.0_f64
+            .min(f64::from(window_w.max(1)) / f64::from(dst.w))
+            .min(f64::from(window_h.max(1)) / f64::from(dst.h));
+          let bicubic_w = (f64::from(dst.w) * scale).round().max(1.0) as i32;
+          let bicubic_h = (f64::from(dst.h) * scale).round().max(1.0) as i32;
+          let texture = self.bicubic_texture(bicubic_w, bicubic_h);
+          if texture.is_null() {
+            SDL_SetTextureScaleMode(self.video, SDL_ScaleMode_SDL_ScaleModeLinear);
+            self.video
+          } else {
+            texture
+          }
+        }
+      };
       SDL_RenderCopyEx(
         self.renderer,
-        self.video,
+        texture,
         ptr::null(),
         &dst,
         rotation,
@@ -743,6 +875,61 @@ impl Ui {
     }
   }
 
+  fn draw_scaling_modes(&self, scaling: super::settings::Scaling, right: i32, y: i32) {
+    let key = self.key_label(SCAN_O, b'o', 32);
+    self.draw_text_right(
+      &crate::i18n::format("Scaling: {key}", &[("key", &key)]),
+      right,
+      y,
+      160,
+    );
+    let names = [
+      crate::i18n::tr("Nearest"),
+      crate::i18n::tr("Linear"),
+      crate::i18n::tr("Bicubic"),
+    ];
+    let textures: Vec<_> = names
+      .iter()
+      .filter_map(|name| self.text_texture(name))
+      .collect();
+    if textures.len() != names.len() {
+      for (texture, _, _) in textures {
+        unsafe { SDL_DestroyTexture(texture) };
+      }
+      return;
+    }
+    let box_w = textures.iter().map(|(_, w, _)| *w).max().unwrap_or(1) + 16;
+    let box_h = textures.iter().map(|(_, _, h)| *h).max().unwrap_or(1) + 8;
+    for (index, &(texture, text_w, text_h)) in textures.iter().enumerate() {
+      let rect = Rect {
+        x: right - box_w,
+        y: y + 25 + index as i32 * (box_h + 3),
+        w: box_w,
+        h: box_h,
+      };
+      if index == scaling.index() {
+        self.color((255, 255, 255));
+        self.outline(rect);
+        self.outline(Rect {
+          x: rect.x + 2,
+          y: rect.y + 2,
+          w: rect.w - 4,
+          h: rect.h - 4,
+        });
+      }
+      let dst = Rect {
+        x: rect.x + (rect.w - text_w) / 2,
+        y: rect.y + (rect.h - text_h) / 2,
+        w: text_w,
+        h: text_h,
+      };
+      unsafe { SDL_RenderCopy(self.renderer, texture, ptr::null(), &dst) };
+    }
+    for (texture, _, _) in textures {
+      unsafe { SDL_DestroyTexture(texture) };
+    }
+  }
+
   pub fn extended_menu(&self, extended: bool, settings: super::settings::Settings) {
     let (width, height) = self.size();
     if width < 24 {
@@ -808,7 +995,7 @@ impl Ui {
     let start_y = if settings.view.zoom != 1.0 { 120 } else { 95 };
     let narrow = width < 700;
     let right_x = if narrow { 12 } else { width / 2 + 8 };
-    let right_y = if narrow { start_y + 5 * 25 } else { start_y };
+    let right_y = if narrow { start_y + 5 * 25 } else { 95 };
     let left_width = if narrow { width - 24 } else { width / 2 - 20 };
     for (i, line) in left.iter().enumerate() {
       let y = start_y + i as i32 * 25;
@@ -821,6 +1008,10 @@ impl Ui {
       if y + 22 < height - 24 {
         self.draw_text_right(line, width - 12, y, width - right_x - 12);
       }
+    }
+    let scaling_y = right_y + right.len() as i32 * 25;
+    if scaling_y + 125 < height - 24 {
+      self.draw_scaling_modes(settings.scaling, width - 12, scaling_y);
     }
   }
 
@@ -868,6 +1059,10 @@ fn initial_window_size(video_w: i32, video_h: i32, display_w: i32, display_h: i3
 impl Drop for Ui {
   fn drop(&mut self) {
     unsafe {
+      if !self.bicubic_video.is_null() {
+        SDL_DestroyTexture(self.bicubic_video);
+      }
+      sws_freeContext(self.bicubic);
       SDL_DestroyRenderer(self.renderer);
       SDL_DestroyWindow(self.window);
       SDL_Quit();

@@ -12,6 +12,8 @@ While paused, Ctrl+Left and Ctrl+Right move one video frame backward or forward.
 
 In menu mode, click the three-line icon at the upper right or press the physical S/Ы key to toggle the extended menu. The controls work even when the menu is hidden, independently of keyboard layout and Caps Lock: 1/2 adjust brightness, 3/4 contrast, 5/6 gamma, and 7/8 saturation. Values start at zero, change one step at a time, and range from -100 to 100. Press 0 to reset these four picture settings without changing the sound. Physical X/Ч and C/С decrease and increase volume in 2.5% steps; Z/Я toggles mute. Keyboard volume and mute buttons work when delivered by SDL. Ctrl+C cycles audio and video tracks together; A cycles audio tracks.
 
+Physical O/Щ cycles video scaling through Nearest, Linear (the default), and Bicubic (through FFmpeg libswscale). The modes are listed vertically on the right side of the extended menu, the selected mode is outlined, and the choice is saved per file.
+
 Picture and audio settings are saved immediately per canonical file path in `~/.config/toview/saves/<sha256>/playback/settings.txt` and restored on the next opening. Picture controls operate on video pixels only: brightness adds value/100, contrast multiplies distance from 0.5 by 2^(value/100), gamma applies the exponent 2^(-value/100), and saturation multiplies distance from luminance by 2^(value/100). Channels are clamped to the displayable range; zero preserves the original frame exactly.
 
 By default, the window stays open on the last frame. Use `--close-on-end=1`, `--close-on-end=on`, `--close-on-end=true`, or `-j` to close it automatically. Use `--close-on-end=0`, `--close-on-end=off`, `--close-on-end=false`, or `-J` to keep it open.

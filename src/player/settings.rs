@@ -14,11 +14,46 @@ pub struct PictureSettings {
   pub saturation: i32,
 }
 
+#[derive(Clone, Copy, Default, PartialEq, Eq, Debug)]
+pub enum Scaling {
+  Nearest,
+  #[default]
+  Linear,
+  Bicubic,
+}
+
+impl Scaling {
+  pub fn next(self) -> Self {
+    match self {
+      Self::Nearest => Self::Linear,
+      Self::Linear => Self::Bicubic,
+      Self::Bicubic => Self::Nearest,
+    }
+  }
+
+  pub fn index(self) -> usize {
+    match self {
+      Self::Nearest => 0,
+      Self::Linear => 1,
+      Self::Bicubic => 2,
+    }
+  }
+
+  fn text(self) -> &'static str {
+    match self {
+      Self::Nearest => "nearest",
+      Self::Linear => "linear",
+      Self::Bicubic => "bicubic",
+    }
+  }
+}
+
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Settings {
   pub picture: PictureSettings,
   pub volume: i32,
   pub muted: bool,
+  pub scaling: Scaling,
   pub view: super::view::ViewTransform,
 }
 
@@ -28,6 +63,7 @@ impl Default for Settings {
       picture: PictureSettings::default(),
       volume: 1000,
       muted: false,
+      scaling: Scaling::default(),
       view: super::view::ViewTransform::default(),
     }
   }
@@ -119,6 +155,12 @@ impl Settings {
           "false" => result.muted = false,
           _ => {}
         },
+        "scaling" => match value {
+          "nearest" => result.scaling = Scaling::Nearest,
+          "linear" => result.scaling = Scaling::Linear,
+          "bicubic" => result.scaling = Scaling::Bicubic,
+          _ => {}
+        },
         _ => {}
       }
     }
@@ -142,13 +184,14 @@ impl Settings {
         .open(&temp)?;
       writeln!(
         file,
-        "brightness={}\ncontrast={}\ngamma={}\nsaturation={}\nvolume={}\nmuted={}\nzoom={}\noffset_x={}\noffset_y={}",
+        "brightness={}\ncontrast={}\ngamma={}\nsaturation={}\nvolume={}\nmuted={}\nscaling={}\nzoom={}\noffset_x={}\noffset_y={}",
         self.picture.brightness,
         self.picture.contrast,
         self.picture.gamma,
         self.picture.saturation,
         self.volume_text(),
         self.muted,
+        self.scaling.text(),
         self.view.zoom,
         self.view.offset_x,
         self.view.offset_y
@@ -194,6 +237,17 @@ impl PictureSettings {
 #[cfg(test)]
 mod tests {
   use super::*;
+  #[test]
+  fn scaling_defaults_to_linear_and_cycles() {
+    let mut scaling = Scaling::default();
+    assert_eq!(scaling, Scaling::Linear);
+    scaling = scaling.next();
+    assert_eq!(scaling, Scaling::Bicubic);
+    scaling = scaling.next();
+    assert_eq!(scaling, Scaling::Nearest);
+    assert_eq!(scaling.next(), Scaling::Linear);
+  }
+
   #[test]
   fn volume_uses_exact_tenths_and_reads_old_values() {
     assert_eq!(parse_volume("100"), Some(1000));

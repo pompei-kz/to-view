@@ -49,6 +49,18 @@ msgstr "Ctrl+Left / Ctrl+Right - frame by frame"
 msgid "Frame: {frame}"
 msgstr "Frame: {frame}"
 
+msgid "Scaling: {key}"
+msgstr "Scaling: {key}"
+
+msgid "Nearest"
+msgstr "Nearest"
+
+msgid "Linear"
+msgstr "Linear"
+
+msgid "Bicubic"
+msgstr "Bicubic"
+
 msgid "audio output unavailable: {error}"
 msgstr "audio output unavailable: {error}"
 

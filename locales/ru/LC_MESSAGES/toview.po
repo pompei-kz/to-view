@@ -49,6 +49,18 @@ msgstr "Ctrl+Left / Ctrl+Right - по кадрам"
 msgid "Frame: {frame}"
 msgstr "Кадр: {frame}"
 
+msgid "Scaling: {key}"
+msgstr "Масштабирование: {key}"
+
+msgid "Nearest"
+msgstr "Без сглаживания"
+
+msgid "Linear"
+msgstr "Линейное"
+
+msgid "Bicubic"
+msgstr "Бикубическое"
+
 msgid "audio output unavailable: {error}"
 msgstr "аудиовыход недоступен: {error}"
 

@@ -237,6 +237,7 @@ impl Playback {
             self.aspect,
             self.metadata.as_ref().map_or(0.0, |media| media.rotation),
             self.settings.view,
+            self.settings.scaling,
           );
         } else {
           ui.clear();
@@ -296,6 +297,10 @@ impl Playback {
           if !repeat {
             self.settings.muted = !self.settings.muted;
           }
+        } else if scan == sdl::SCAN_O {
+          if !repeat {
+            self.settings.scaling = self.settings.scaling.next();
+          }
         } else { /* process other shortcuts below */
         }
         if self.settings != before {
@@ -309,6 +314,7 @@ impl Playback {
             sdl::SCAN_X,
             sdl::SCAN_C,
             sdl::SCAN_Z,
+            sdl::SCAN_O,
             sdl::SCAN_VOLUMEUP,
             sdl::SCAN_VOLUMEDOWN,
             sdl::SCAN_MUTE,
