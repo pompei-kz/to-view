@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="570" viewBox="0 0 1000 570">
+ <title>Расширенное меню — русская раскладка</title>
+ <defs><linearGradient id="scene" x2="0.9" y2="1"><stop stop-color="#21354a"/><stop offset="1" stop-color="#887d6a"/></linearGradient></defs>
+ <rect width="1000" height="570" fill="url(#scene)"/>
+ <path d="M0 425 L210 215 375 365 540 195 775 410 1000 235 V570 H0Z" fill="#182934" opacity=".6"/>
+ <g font-family="DejaVu Sans, sans-serif" font-size="22" fill="white" stroke="#111" stroke-width="3" paint-order="stroke fill">
+  <text x="20" y="38">Й — выход, Esc / М — Меню (показать/спрятать)</text>
+  <text x="20" y="70">Ctrl + ← / → — по кадрам</text>
+  <text x="20" y="102">Кадр: 3213</text>
+  <text x="20" y="154">Яркость: 1 − 0 + 2</text>
+  <text x="20" y="186">Контрастность: 3 − 0 + 4</text>
+  <text x="20" y="218">Гамма: 5 − 0 + 6</text>
+  <text x="20" y="250">Насыщенность: 7 − 0 + 8</text>
+  <text x="615" y="154">Громкость: Ч − 100% + С</text>
+  <text x="615" y="186">Я — выключить звук</text>
+ </g>
+ <g fill="none" stroke="#111" stroke-width="7" stroke-linecap="round"><path d="M922 26h53 M922 37h53 M922 48h53"/></g>
+ <g fill="none" stroke="white" stroke-width="3" stroke-linecap="round"><path d="M922 26h53 M922 37h53 M922 48h53"/></g>
+ <text x="949" y="44" text-anchor="middle" font-family="DejaVu Sans, sans-serif" font-size="19" font-weight="bold" fill="white" stroke="#111" stroke-width="3" paint-order="stroke fill">Ы</text>
+ <g stroke="white" fill="none"><path d="M20 518v24l19-12z" stroke-width="2"/><path d="M64 531h907" stroke-width="3"/><path d="M432 520v22" stroke-width="3"/></g>
+ <g font-family="DejaVu Sans, sans-serif" font-size="16" fill="white" stroke="#111" stroke-width="3" paint-order="stroke fill"><text x="64" y="518">00:03:12</text><text x="886" y="518">00:12:40</text></g>
+</svg>
