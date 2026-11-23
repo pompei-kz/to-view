@@ -178,15 +178,15 @@ impl Input {
     }
   }
 
-  fn seek(&mut self, generation: u64, start: i64) -> Result<(), String> {
+  fn seek(&mut self, generation: u64, position: i64) -> Result<(), String> {
     self.interrupt.active = generation;
     unsafe {
       let raw = self.raw.as_ptr();
-      let result = if (*(*raw).iformat).flags & AVFMT_TS_DISCONT as i32 != 0 {
-        av_seek_frame(raw, -1, 0, AVSEEK_FLAG_BYTE as i32)
-      } else {
-        avformat_seek_file(raw, -1, i64::MIN, start, start, 0)
-      };
+      // With stream_index = -1 timestamps use AV_TIME_BASE, the same microsecond
+      // scale as Media::start and all player positions. Restrict the upper bound
+      // to the requested position so demuxers choose a keyframe at or before it;
+      // Output then discards decoded frames preceding the exact target.
+      let result = avformat_seek_file(raw, -1, i64::MIN, position, position, 0);
       check(result, "seek input")?;
     }
     Ok(())
@@ -697,7 +697,10 @@ impl Media {
   }
 
   fn frame_target(&mut self, seek: Seek, current: i64, forward: bool) -> Result<i64, String> {
-    self.input.seek(seek.generation, self.output.start)?;
+    self.input.seek(
+      seek.generation,
+      self.output.start.saturating_add(current.max(0)),
+    )?;
     let Some(video) = &mut self.video else {
       return Ok(current);
     };
@@ -760,7 +763,21 @@ impl Media {
     if let Target::Frame { current, forward } = seek.target {
       seek.target = Target::Time(self.frame_target(seek, current, forward)?);
     }
-    self.input.seek(seek.generation, self.output.start)?;
+    let position = match seek.target {
+      Target::Time(position) => position.max(0),
+      Target::First => 0,
+      // Seeking to the exact duration commonly lands at EOF. Start close to the
+      // end instead, then decode through EOF to retain the actual final frame.
+      Target::Last => self
+        .metadata
+        .duration
+        .unwrap_or(0)
+        .saturating_sub(10_000_000),
+      Target::Frame { .. } => unreachable!(),
+    };
+    self
+      .input
+      .seek(seek.generation, self.output.start.saturating_add(position))?;
     if let Some(video) = &mut self.video {
       video.flush();
     }
