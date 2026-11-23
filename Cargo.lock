@@ -366,7 +366,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "to-view"
+name = "toview"
 version = "0.1.0"
 dependencies = [
  "fontdue",

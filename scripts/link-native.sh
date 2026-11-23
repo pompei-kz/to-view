@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Build scripts and procedural macros are host tools. Only to-view passes
+# Build scripts and procedural macros are host tools. Only toview passes
 # -static-pie from build.rs and needs the static C runtime and unwinder.
 for arg in "$@"; do
     if [[ "$arg" == -static-pie ]]; then

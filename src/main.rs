@@ -3,7 +3,7 @@ mod window_geometry;
 
 use std::{env, ffi::OsString, path::PathBuf, process::ExitCode};
 
-const USAGE: &str = "Usage: to-view [OPTIONS] [--] <video-file>
+const USAGE: &str = "Usage: toview [OPTIONS] [--] <video-file>
 
   --close-on-end=1, -j, -j1  Close the window at the end of playback
   --close-on-end=0, -J, -j0  Keep the window open (default)
@@ -64,7 +64,7 @@ fn main() -> ExitCode {
     Ok(Command::Play(options)) => match player::play(options) {
       Ok(code) => ExitCode::from(code),
       Err(error) => {
-        eprintln!("to-view: {error}");
+        eprintln!("toview: {error}");
         ExitCode::FAILURE
       }
     },
@@ -73,11 +73,11 @@ fn main() -> ExitCode {
       ExitCode::SUCCESS
     }
     Ok(Command::Version) => {
-      println!("to-view {}", env!("CARGO_PKG_VERSION"));
+      println!("toview {}", env!("CARGO_PKG_VERSION"));
       ExitCode::SUCCESS
     }
     Err(error) => {
-      eprintln!("to-view: {error}\n{USAGE}");
+      eprintln!("toview: {error}\n{USAGE}");
       ExitCode::from(2)
     }
   }

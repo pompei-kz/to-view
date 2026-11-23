@@ -32,7 +32,7 @@ impl Output {
     if !explicit_sdl && pulseaudio::socket_path_from_env().is_some_and(|path| path.exists()) {
       match Pulse::open() {
         Ok(output) => return Ok(Self::Server(output)),
-        Err(error) => eprintln!("to-view: audio server unavailable: {error}"),
+        Err(error) => eprintln!("toview: audio server unavailable: {error}"),
       }
     }
     sdl::AudioDevice::open().map(Self::Sdl)
@@ -133,7 +133,7 @@ impl Pulse {
       .and_then(|path| fs::read(path).ok())
       .filter(|bytes| bytes.len() == 256)
       .unwrap_or_else(|| vec![0; 256]);
-    let client = Client::new_unix(c"to-view", socket, Some(cookie))
+    let client = Client::new_unix(c"toview", socket, Some(cookie))
       .map_err(|error| format!("connect to PulseAudio: {error:?}"))?;
     let queue = Arc::new(Mutex::new(Queue::default()));
     let mut params = protocol::PlaybackStreamParams {
@@ -245,7 +245,7 @@ impl Pulse {
 
   fn fail(&self, error: impl std::fmt::Display) {
     if !self.failed.replace(true) {
-      eprintln!("to-view: audio server disconnected: {error}");
+      eprintln!("toview: audio server disconnected: {error}");
       self.queue.lock().unwrap().bytes.clear();
     }
   }

@@ -630,7 +630,7 @@ impl Media {
         .and_then(|stream| match Decoder::open(stream) {
           Ok(audio) => Some(audio),
           Err(error) => {
-            eprintln!("to-view: {error}");
+            eprintln!("toview: {error}");
             None
           }
         });

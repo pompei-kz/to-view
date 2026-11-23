@@ -472,7 +472,7 @@ impl Playback {
               Err(error) if audio_only => {
                 return Err(format!("audio output unavailable: {error}"));
               }
-              Err(error) => eprintln!("to-view: audio output unavailable: {error}"),
+              Err(error) => eprintln!("toview: audio output unavailable: {error}"),
             }
           }
         }
@@ -501,7 +501,7 @@ impl Playback {
         Event::Audio(audio) => self.queue_audio(audio)?,
         Event::End => self.eof = true,
         Event::SeekFailed(error) => {
-          eprintln!("to-view: {error}");
+          eprintln!("toview: {error}");
           self.seek_target = None;
           self.clock.set(self.position);
           if let Some(audio) = &self.audio {

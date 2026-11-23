@@ -4,10 +4,10 @@ set -euo pipefail
 out=$1
 script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
 prefix="$out/install"
-jobs=${TO_VIEW_BUILD_JOBS:-$(nproc)}
+jobs=${TOVIEW_BUILD_JOBS:-$(nproc)}
 jobs=$((jobs > 8 ? 8 : jobs))
 machine=$(cc -dumpmachine)
-xroot=${TO_VIEW_X11_SYSROOT:-}
+xroot=${TOVIEW_X11_SYSROOT:-}
 xlib="$xroot/usr/lib/$machine"
 mkdir -p "$out" "$prefix"
 cd "$out"
@@ -107,7 +107,7 @@ make -j"$jobs" libavformat/libavformat.a libavcodec/libavcodec.a \
 
 
 # Run bindgen as a build-time tool so libclang is never loaded by the player.
-bindgen=${TO_VIEW_BINDGEN:-"$out/bindgen-tool/bin/bindgen"}
+bindgen=${TOVIEW_BINDGEN:-"$out/bindgen-tool/bin/bindgen"}
 if [[ ! -x "$bindgen" ]]; then
     RUSTFLAGS='' CARGO_ENCODED_RUSTFLAGS='' cargo install --locked --version 0.72.1 \
         --target-dir "$out/bindgen-build" --root "$out/bindgen-tool" bindgen-cli

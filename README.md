@@ -1,4 +1,4 @@
-# to-view
+# toview
 
 A minimal video player with a Rust playback engine. It uses FFmpeg for demuxing and decoding and SDL2 for the window, input, and output. Open a local video file to start playback immediately. Press Space to toggle pause. Esc or the physical V/М key toggles the menu overlay in the upper-left corner and preserves the current playback state. Press the physical F/А key to toggle fullscreen, regardless of keyboard layout or Caps Lock. To quit, press the physical Q/Й key in any keyboard layout or use the window's close button.
 
@@ -10,7 +10,7 @@ While paused, Ctrl+Left and Ctrl+Right move one video frame backward or forward.
 
 By default, the window stays open on the last frame. Use `--close-on-end=1`, `-j`, or `-j1` to close it automatically. Use `--close-on-end=0`, `-J`, or `-j0` to keep it open.
 
-The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/to-view/saves/<sha256>/window/position.txt` and `size.txt`. The hash is SHA-256 of the canonical absolute file path. New files open centered on the monitor containing the pointer, fitted within three quarters of its usable width and height while preserving the video aspect ratio.
+The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/toview/saves/<sha256>/window/position.txt` and `size.txt`. The hash is SHA-256 of the canonical absolute file path. New files open centered on the monitor containing the pointer, fitted within three quarters of its usable width and height while preserving the video aspect ratio.
 
 ## Building on Debian or Ubuntu
 
@@ -20,13 +20,13 @@ Install Rust with Cargo, then install the build tools and X11 headers listed bel
 sudo apt install build-essential binutils pkg-config curl xz-utils bzip2 clang libclang-dev \
   libx11-dev libxext-dev libxcb1-dev libxau-dev libxdmcp-dev x11proto-dev xtrans-dev
 cargo build --release
-./target/release/to-view /path/to/video/file.mp4
+./target/release/toview /path/to/video/file.mp4
 ```
 
 On the first build, Cargo downloads the pinned source releases of FFmpeg, SDL2, and ALSA. The build also uses a pinned bindgen CLI and libclang to generate Rust bindings. The resulting binary includes those libraries, the X11 client, and the icon. The player needs access to an X11 or Xwayland server to open a window and uses the desktop audio server (PipeWire’s PulseAudio interface or PulseAudio) when available. It falls back to SDL2 with ALSA. Set `AUDIODEV` to select an audio device, for example `AUDIODEV=plughw:1,0`. This version targets Linux with X11 and uses software rendering.
 
 ```sh
-readelf -l -d target/release/to-view
+readelf -l -d target/release/toview
 ```
 
-The static binary has no `INTERP` program header or `NEEDED` entries. For paths that begin with a hyphen, use `to-view -- -video.mp4`.
+The static binary has no `INTERP` program header or `NEEDED` entries. For paths that begin with a hyphen, use `toview -- -video.mp4`.

@@ -96,7 +96,7 @@ impl Ui {
       let center = SDL_WINDOWPOS_CENTERED_MASK as i32;
       let (x, y) = geometry.position.unwrap_or((center, center));
       let (w, h) = geometry.size.unwrap_or((640, 480));
-      let title = std::ffi::CString::new(format!("{file_name} - to-view"))
+      let title = std::ffi::CString::new(format!("{file_name} - toview"))
         .map_err(|_| "invalid window title")?;
       let window = SDL_CreateWindow(
         title.as_ptr(),
@@ -458,7 +458,7 @@ impl Ui {
       .unwrap_or_else(|| "V".to_owned());
     let frame = frame.map_or_else(|| "-".to_owned(), |value| value.to_string());
     let text = format!(
-      "Esc / {toggle_label} - выход из режима меню, {label} - выход\nCtrl+Left / Ctrl+Right - по кадрам\nКадр: {frame}"
+      "{label} - выход, Esc / {toggle_label} - Меню (показать/спрятать)\nCtrl+Left / Ctrl+Right - по кадрам\nКадр: {frame}"
     );
     let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
     layout.reset(&LayoutSettings::default());

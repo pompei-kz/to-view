@@ -9,12 +9,17 @@ use std::{
   time::{SystemTime, UNIX_EPOCH},
 };
 
-fn directory(path: &Path) -> Option<PathBuf> {
+fn directory(path: &Path, application: &str) -> Option<PathBuf> {
   let home = PathBuf::from(env::var_os("HOME")?);
   let hash = format!("{:x}", Sha256::digest(path.as_os_str().as_bytes()));
-  home
-    .is_absolute()
-    .then(|| home.join(".config/to-view/saves").join(hash).join("window"))
+  home.is_absolute().then(|| {
+    home
+      .join(".config")
+      .join(application)
+      .join("saves")
+      .join(hash)
+      .join("window")
+  })
 }
 
 fn read_pair(path: &Path) -> Option<(i32, i32)> {
@@ -33,26 +38,39 @@ pub struct Geometry {
 
 impl Geometry {
   pub fn load(path: &Path) -> Self {
-    let Some(dir) = directory(path) else {
+    let Some(dir) = directory(path, "toview") else {
       return Self::default();
     };
+    let legacy = directory(path, "to-view");
+    let read = |name: &str| {
+      let current = dir.join(name);
+      if current.exists() {
+        read_pair(&current)
+      } else {
+        legacy
+          .as_ref()
+          .and_then(|legacy| read_pair(&legacy.join(name)))
+      }
+    };
     Self {
-      position: read_pair(&dir.join("position.txt")),
-      size: read_pair(&dir.join("size.txt")).filter(|&(w, h)| w > 0 && h > 0),
+      position: read("position.txt"),
+      size: read("size.txt").filter(|&(w, h)| w > 0 && h > 0),
     }
   }
 
   pub fn save(self, path: &Path) {
-    let Some(dir) = directory(path) else { return };
+    let Some(dir) = directory(path, "toview") else {
+      return;
+    };
     if let Err(error) = fs::create_dir_all(&dir) {
-      eprintln!("to-view: could not create {}: {error}", dir.display());
+      eprintln!("toview: could not create {}: {error}", dir.display());
       return;
     }
     for (name, pair) in [("position.txt", self.position), ("size.txt", self.size)] {
       if let Some((first, second)) = pair {
         if let Err(error) = write_pair(&dir, name, first, second) {
           eprintln!(
-            "to-view: could not save {}: {error}",
+            "toview: could not save {}: {error}",
             dir.join(name).display()
           );
         }

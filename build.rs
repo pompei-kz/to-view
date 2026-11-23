@@ -4,9 +4,9 @@ fn main() {
   println!("cargo:rerun-if-changed=scripts/build-native.sh");
   println!("cargo:rerun-if-changed=scripts/link-native.sh");
   println!("cargo:rerun-if-changed=scripts/native-bindings.h");
-  println!("cargo:rerun-if-env-changed=TO_VIEW_X11_SYSROOT");
-  println!("cargo:rerun-if-env-changed=TO_VIEW_BUILD_JOBS");
-  println!("cargo:rerun-if-env-changed=TO_VIEW_BINDGEN");
+  println!("cargo:rerun-if-env-changed=TOVIEW_X11_SYSROOT");
+  println!("cargo:rerun-if-env-changed=TOVIEW_BUILD_JOBS");
+  println!("cargo:rerun-if-env-changed=TOVIEW_BINDGEN");
 
   assert_eq!(
     env::var("TARGET").unwrap(),
@@ -15,7 +15,7 @@ fn main() {
   );
   assert!(
     env::var("TARGET").unwrap().ends_with("-linux-gnu"),
-    "to-view requires Linux with a GNU build toolchain"
+    "toview requires Linux with a GNU build toolchain"
   );
   let out = PathBuf::from(env::var_os("OUT_DIR").unwrap()).join("native");
   let status = Command::new("bash")
