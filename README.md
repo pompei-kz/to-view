@@ -14,9 +14,11 @@ In menu mode, click the three-line icon at the upper right or press the physical
 
 Picture and audio settings are saved immediately per canonical file path in `~/.config/toview/saves/<sha256>/playback/settings.txt` and restored on the next opening. Picture controls operate on video pixels only: brightness adds value/100, contrast multiplies distance from 0.5 by 2^(value/100), gamma applies the exponent 2^(-value/100), and saturation multiplies distance from luminance by 2^(value/100). Channels are clamped to the displayable range; zero preserves the original frame exactly.
 
-By default, the window stays open on the last frame. Use `--close-on-end=1`, `-j`, or `-j1` to close it automatically. Use `--close-on-end=0`, `-J`, or `-j0` to keep it open.
+By default, the window stays open on the last frame. Use `--close-on-end=1`, `--close-on-end=on`, `--close-on-end=true`, or `-j` to close it automatically. Use `--close-on-end=0`, `--close-on-end=off`, `--close-on-end=false`, or `-J` to keep it open.
 
-The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/toview/saves/<sha256>/window/position.txt` and `size.txt`. The hash is SHA-256 of the canonical absolute file path. New files open centered on the monitor containing the pointer, fitted within three quarters of its usable width and height while preserving the video aspect ratio.
+Errors are written to standard error by default. Use `--out-err=/path/to/log-file` to redirect the player's error output to a file; the file is replaced on each launch.
+
+The player restores its window position and size across launches. After the window stops moving or resizing for 300 ms, it saves the normal window geometry as two space-separated integers per file in `~/.config/toview/saves/<sha256>/window/position.txt` and `size.txt`. The hash is SHA-256 of the canonical absolute file path. New files open at the video's native display size, centered on the monitor containing the pointer. Videos larger than four fifths of that monitor's usable width or height are scaled down to the largest size satisfying both limits while preserving aspect ratio. Videos smaller than 100 pixels on either axis are proportionally enlarged until both axes reach at least 100 pixels, unless the display limit prevents it.
 
 ## Building on Debian or Ubuntu
 

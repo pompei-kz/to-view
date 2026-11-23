@@ -10,6 +10,9 @@ msgstr "Закрыть окно после окончания воспроизв
 msgid "Keep the window open (default)"
 msgstr "Оставить окно открытым (по умолчанию)"
 
+msgid "Redirect error output to a file"
+msgstr "Перенаправить поток ошибок в файл"
+
 msgid "Show help"
 msgstr "Показать справку"
 
@@ -22,8 +25,14 @@ msgstr "не указан видеофайл"
 msgid "unexpected extra argument"
 msgstr "лишний аргумент"
 
-msgid "--close-on-end requires =0 or =1"
-msgstr "для --close-on-end требуется =0 или =1"
+msgid "--close-on-end requires =1, =on, =true, =0, =off, or =false"
+msgstr "для --close-on-end требуется =1, =on, =true, =0, =off или =false"
+
+msgid "--out-err requires a non-empty path"
+msgstr "для --out-err требуется непустой путь"
+
+msgid "--out-err requires =PATH"
+msgstr "для --out-err требуется =ПУТЬ"
 
 msgid "unknown option {option}"
 msgstr "неизвестный параметр {option}"

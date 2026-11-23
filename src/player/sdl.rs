@@ -229,12 +229,7 @@ impl Ui {
           SDL_GetDisplayBounds(selected, &mut bounds);
         }
         if bounds.w > 0 && bounds.h > 0 && video_width > 0 && video_height > 0 {
-          let max_w = (bounds.w * 3 / 4).max(1);
-          let max_h = (bounds.h * 3 / 4).max(1);
-          let scale = (f64::from(max_w) / f64::from(video_width))
-            .min(f64::from(max_h) / f64::from(video_height));
-          let w = (f64::from(video_width) * scale).round().max(1.0) as i32;
-          let h = (f64::from(video_height) * scale).round().max(1.0) as i32;
+          let (w, h) = initial_window_size(video_width, video_height, bounds.w, bounds.h);
           SDL_SetWindowSize(self.window, w, h);
           if self.geometry.position.is_none() {
             SDL_SetWindowPosition(
@@ -250,6 +245,11 @@ impl Ui {
         return;
       }
       SDL_ShowWindow(self.window);
+      // The window starts hidden while its initial video-sized geometry is
+      // calculated. Explicitly activate it after mapping; otherwise some X11
+      // window managers leave focus on the previously active application.
+      SDL_RaiseWindow(self.window);
+      SDL_SetWindowInputFocus(self.window);
     }
     self.visible = true;
     self.remember();
@@ -845,6 +845,26 @@ impl Ui {
   }
 }
 
+fn initial_window_size(video_w: i32, video_h: i32, display_w: i32, display_h: i32) -> (i32, i32) {
+  let max_w = (display_w * 4 / 5).max(1);
+  let max_h = (display_h * 4 / 5).max(1);
+  let max_scale =
+    (f64::from(max_w) / f64::from(video_w)).min(f64::from(max_h) / f64::from(video_h));
+  let scale = if video_w > max_w || video_h > max_h {
+    max_scale
+  } else if video_w < 100 || video_h < 100 {
+    (100.0 / f64::from(video_w))
+      .max(100.0 / f64::from(video_h))
+      .min(max_scale)
+  } else {
+    1.0
+  };
+  (
+    (f64::from(video_w) * scale).round().max(1.0) as i32,
+    (f64::from(video_h) * scale).round().max(1.0) as i32,
+  )
+}
+
 impl Drop for Ui {
   fn drop(&mut self) {
     unsafe {
@@ -920,5 +940,22 @@ impl AudioDevice {
 impl Drop for AudioDevice {
   fn drop(&mut self) {
     unsafe { SDL_CloseAudioDevice(self.id) };
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::initial_window_size;
+
+  #[test]
+  fn initial_size_keeps_native_size_and_respects_both_limits() {
+    assert_eq!(initial_window_size(720, 304, 1920, 1080), (720, 304));
+    assert_eq!(initial_window_size(1920, 804, 1920, 1080), (1536, 643));
+    assert_eq!(initial_window_size(1080, 1920, 1920, 1080), (486, 864));
+  }
+
+  #[test]
+  fn initial_size_enlarges_tiny_video_proportionally() {
+    assert_eq!(initial_window_size(50, 40, 1920, 1080), (125, 100));
   }
 }

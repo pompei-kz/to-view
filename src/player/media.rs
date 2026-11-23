@@ -17,6 +17,7 @@ const TIME_BASE: AVRational = AVRational {
 };
 const EAGAIN: i32 = -11;
 const EOF: i32 = -541_478_725;
+const INVALID_DATA: i32 = -1_094_995_529;
 pub const SAMPLE_RATE: i32 = 48_000;
 pub const CHANNELS: usize = 2;
 pub const STOP: u64 = u64::MAX;
@@ -283,6 +284,14 @@ impl Decoder {
     unsafe {
       let code = avcodec_send_packet(self.raw.as_ptr(), packet);
       if code == EOF && packet.is_null() {
+        return Ok(());
+      }
+      if code == INVALID_DATA {
+        eprintln!(
+          "toview: {}: {}",
+          crate::i18n::tr("send packet"),
+          ff_error(code)
+        );
         return Ok(());
       }
       check(code, "send packet")?;

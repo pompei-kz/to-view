@@ -10,6 +10,9 @@ msgstr "Ойнату аяқталғанда терезені жабу"
 msgid "Keep the window open (default)"
 msgstr "Терезені ашық қалдыру (әдепкі)"
 
+msgid "Redirect error output to a file"
+msgstr "Қате шығысын файлға бағыттау"
+
 msgid "Show help"
 msgstr "Анықтаманы көрсету"
 
@@ -22,8 +25,14 @@ msgstr "бейнефайл көрсетілмеген"
 msgid "unexpected extra argument"
 msgstr "артық аргумент"
 
-msgid "--close-on-end requires =0 or =1"
-msgstr "--close-on-end үшін =0 немесе =1 қажет"
+msgid "--close-on-end requires =1, =on, =true, =0, =off, or =false"
+msgstr "--close-on-end үшін =1, =on, =true, =0, =off немесе =false қажет"
+
+msgid "--out-err requires a non-empty path"
+msgstr "--out-err үшін бос емес жол қажет"
+
+msgid "--out-err requires =PATH"
+msgstr "--out-err үшін =ЖОЛ қажет"
 
 msgid "unknown option {option}"
 msgstr "белгісіз параметр {option}"

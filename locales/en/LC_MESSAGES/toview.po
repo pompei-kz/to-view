@@ -10,6 +10,9 @@ msgstr "Close the window at the end of playback"
 msgid "Keep the window open (default)"
 msgstr "Keep the window open (default)"
 
+msgid "Redirect error output to a file"
+msgstr "Redirect error output to a file"
+
 msgid "Show help"
 msgstr "Show help"
 
@@ -22,8 +25,14 @@ msgstr "missing video file"
 msgid "unexpected extra argument"
 msgstr "unexpected extra argument"
 
-msgid "--close-on-end requires =0 or =1"
-msgstr "--close-on-end requires =0 or =1"
+msgid "--close-on-end requires =1, =on, =true, =0, =off, or =false"
+msgstr "--close-on-end requires =1, =on, =true, =0, =off, or =false"
+
+msgid "--out-err requires a non-empty path"
+msgstr "--out-err requires a non-empty path"
+
+msgid "--out-err requires =PATH"
+msgstr "--out-err requires =PATH"
 
 msgid "unknown option {option}"
 msgstr "unknown option {option}"
