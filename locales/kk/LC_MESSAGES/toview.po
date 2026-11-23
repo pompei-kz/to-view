@@ -1,0 +1,171 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: kk\nPlural-Forms: nplurals=1; plural=0;\n"
+
+msgid "Usage: toview [OPTIONS] [--] <video-file>"
+msgstr "Қолдану: toview [ПАРАМЕТРЛЕР] [--] <бейнефайл>"
+
+msgid "Close the window at the end of playback"
+msgstr "Ойнату аяқталғанда терезені жабу"
+
+msgid "Keep the window open (default)"
+msgstr "Терезені ашық қалдыру (әдепкі)"
+
+msgid "Show help"
+msgstr "Анықтаманы көрсету"
+
+msgid "Show version"
+msgstr "Нұсқаны көрсету"
+
+msgid "missing video file"
+msgstr "бейнефайл көрсетілмеген"
+
+msgid "unexpected extra argument"
+msgstr "артық аргумент"
+
+msgid "--close-on-end requires =0 or =1"
+msgstr "--close-on-end үшін =0 немесе =1 қажет"
+
+msgid "unknown option {option}"
+msgstr "белгісіз параметр {option}"
+
+msgid "{path}: expected a regular video file"
+msgstr "{path}: кәдімгі бейнефайл қажет"
+
+msgid "{quit} - quit, Esc / {menu} - Menu (show/hide)"
+msgstr "{quit} - шығу, Esc / {menu} - Мәзір (көрсету/жасыру)"
+
+msgid "Ctrl+Left / Ctrl+Right - frame by frame"
+msgstr "Ctrl+Left / Ctrl+Right - кадр бойынша"
+
+msgid "Frame: {frame}"
+msgstr "Кадр: {frame}"
+
+msgid "audio output unavailable: {error}"
+msgstr "аудио шығысы қолжетімсіз: {error}"
+
+msgid "audio server unavailable: {error}"
+msgstr "аудио сервер қолжетімсіз: {error}"
+
+msgid "audio server disconnected: {error}"
+msgstr "аудио сервер ажыратылды: {error}"
+
+msgid "media decoder exited"
+msgstr "декодер жұмысын аяқтады"
+
+msgid "file contains no decodable video frames"
+msgstr "файлда декодталатын бейне кадрлар жоқ"
+
+msgid "no playable audio or video stream"
+msgstr "ойнатылатын аудио немесе бейне жол жоқ"
+
+msgid "no decoder for selected stream"
+msgstr "таңдалған жол үшін декодер жоқ"
+
+msgid "could not allocate input context"
+msgstr "файл контекстін бөлу мүмкін болмады"
+
+msgid "could not allocate packet"
+msgstr "пакетті бөлу мүмкін болмады"
+
+msgid "could not allocate frame"
+msgstr "кадрды бөлу мүмкін болмады"
+
+msgid "could not allocate decoder"
+msgstr "декодерді бөлу мүмкін болмады"
+
+msgid "could not configure video conversion"
+msgstr "бейне түрлендіруін баптау мүмкін болмады"
+
+msgid "audio packet is too large"
+msgstr "аудиопакет тым үлкен"
+
+msgid "invalid file path"
+msgstr "файл жолы жарамсыз"
+
+msgid "media decoder stopped unexpectedly"
+msgstr "декодер күтпеген жерден тоқтады"
+
+msgid "open input"
+msgstr "файлды ашу"
+
+msgid "read stream information"
+msgstr "жолдар туралы ақпаратты оқу"
+
+msgid "seek input"
+msgstr "файлды айналдыру"
+
+msgid "configure decoder"
+msgstr "декодерді баптау"
+
+msgid "open decoder"
+msgstr "декодерді ашу"
+
+msgid "send packet"
+msgstr "пакетті жіберу"
+
+msgid "decode frame"
+msgstr "кадрды декодтау"
+
+msgid "convert video frame"
+msgstr "бейнекадрды түрлендіру"
+
+msgid "copy channel layout"
+msgstr "арналар орналасуын көшіру"
+
+msgid "configure audio conversion"
+msgstr "дыбысты түрлендіруді баптау"
+
+msgid "initialize audio conversion"
+msgstr "дыбысты түрлендіруді іске қосу"
+
+msgid "size audio buffer"
+msgstr "аудио буфер өлшемін есептеу"
+
+msgid "convert audio samples"
+msgstr "аудио үлгілерін түрлендіру"
+
+msgid "read media packet"
+msgstr "медиа пакетті оқу"
+
+msgid "read frames for stepping"
+msgstr "ауысу үшін кадрларды оқу"
+
+msgid "retain final video frame"
+msgstr "соңғы кадрды сақтау"
+
+msgid "__toview_language__"
+msgstr "kk"
+
+msgid "start media decoder: {error}"
+msgstr "декодерді іске қосу мүмкін болмады: {error}"
+
+msgid "could not create {path}: {error}"
+msgstr "{path} жасау мүмкін болмады: {error}"
+
+msgid "could not save {path}: {error}"
+msgstr "{path} сақтау мүмкін болмады: {error}"
+
+msgid "unsupported video size {width}x{height}"
+msgstr "қолдау көрсетілмейтін бейне өлшемі {width}x{height}"
+
+msgid "load menu font: {error}"
+msgstr "мәзір қарпін жүктеу мүмкін болмады: {error}"
+
+msgid "load fallback font: {error}"
+msgstr "қосалқы қаріпті жүктеу мүмкін болмады: {error}"
+
+msgid "invalid window title"
+msgstr "терезе тақырыбы жарамсыз"
+
+msgid "no local audio socket"
+msgstr "жергілікті аудио сокеті табылмады"
+
+msgid "connect to PulseAudio: {error}"
+msgstr "PulseAudio серверіне қосылу мүмкін болмады: {error}"
+
+msgid "open PulseAudio stream: {error}"
+msgstr "PulseAudio ағынын ашу мүмкін болмады: {error}"
+
+msgid "{count} frame"
+msgid_plural "{count} frames"
+msgstr[0] "{count} кадр"

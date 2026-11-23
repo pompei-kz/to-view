@@ -33,9 +33,13 @@ pub fn play(options: Options) -> Result<u8, String> {
   let path = fs::canonicalize(&options.path)
     .map_err(|error| format!("{}: {error}", options.path.display()))?;
   if !path.is_file() {
-    return Err(format!("{}: expected a regular video file", path.display()));
+    return Err(crate::i18n::format(
+      "{path}: expected a regular video file",
+      &[("path", &path.display().to_string())],
+    ));
   }
-  let input = CString::new(path.as_os_str().as_bytes()).map_err(|_| "invalid file path")?;
+  let input =
+    CString::new(path.as_os_str().as_bytes()).map_err(|_| crate::i18n::tr("invalid file path"))?;
   let title = options
     .path
     .file_name()
@@ -49,14 +53,16 @@ pub fn play(options: Options) -> Result<u8, String> {
   let worker = thread::Builder::new()
     .name("media decoder".into())
     .spawn(move || media::run(input, worker_request, seek_rx, event_tx))
-    .map_err(|e| format!("start media decoder: {e}"))?;
+    .map_err(|e| {
+      crate::i18n::format("start media decoder: {error}", &[("error", &e.to_string())])
+    })?;
   let mut playback = Playback::new(requested, seek_tx, event_rx);
   let result = playback.run(&mut ui, options.close_on_end);
   playback.requested.store(media::STOP, Ordering::Release);
   drop(playback);
   worker
     .join()
-    .map_err(|_| "media decoder stopped unexpectedly")?;
+    .map_err(|_| crate::i18n::tr("media decoder stopped unexpectedly"))?;
   result.map(|()| 0)
 }
 
@@ -452,7 +458,7 @@ impl Playback {
           Ok(message) => message,
           Err(TryRecvError::Empty) => break,
           Err(TryRecvError::Disconnected) if self.eof => break,
-          Err(TryRecvError::Disconnected) => return Err("media decoder exited".into()),
+          Err(TryRecvError::Disconnected) => return Err(crate::i18n::tr("media decoder exited")),
         },
       };
       if message.generation != self.generation {
@@ -470,9 +476,15 @@ impl Playback {
             match audio_output::Output::open() {
               Ok(audio) => self.audio = Some(audio),
               Err(error) if audio_only => {
-                return Err(format!("audio output unavailable: {error}"));
+                return Err(crate::i18n::format(
+                  "audio output unavailable: {error}",
+                  &[("error", &error)],
+                ));
               }
-              Err(error) => eprintln!("toview: audio output unavailable: {error}"),
+              Err(error) => eprintln!(
+                "toview: {}",
+                crate::i18n::format("audio output unavailable: {error}", &[("error", &error)])
+              ),
             }
           }
         }
@@ -622,7 +634,7 @@ impl Playback {
       return Ok(false);
     }
     if !self.started {
-      return Err("file contains no decodable video frames".into());
+      return Err(crate::i18n::tr("file contains no decodable video frames"));
     }
     if let Some(target) = self.seek_target.take() {
       if matches!(target, Target::Last) {

@@ -104,7 +104,7 @@ fn ff_error(code: i32) -> String {
 
 fn check(code: i32, action: &str) -> Result<i32, String> {
   if code < 0 {
-    Err(format!("{action}: {}", ff_error(code)))
+    Err(format!("{}: {}", crate::i18n::tr(action), ff_error(code)))
   } else {
     Ok(code)
   }
@@ -124,7 +124,7 @@ impl Input {
     unsafe {
       let mut raw = avformat_alloc_context();
       if raw.is_null() {
-        return Err("could not allocate input context".into());
+        return Err(crate::i18n::tr("could not allocate input context"));
       }
       (*raw).interrupt_callback = AVIOInterruptCB {
         callback: Some(interrupt),
@@ -205,7 +205,7 @@ impl Packet {
   fn new() -> Result<Self, String> {
     NonNull::new(unsafe { av_packet_alloc() })
       .map(Self)
-      .ok_or_else(|| "could not allocate packet".into())
+      .ok_or_else(|| crate::i18n::tr("could not allocate packet"))
   }
 }
 
@@ -221,7 +221,7 @@ impl Frame {
   fn new() -> Result<Self, String> {
     NonNull::new(unsafe { av_frame_alloc() })
       .map(Self)
-      .ok_or_else(|| "could not allocate frame".into())
+      .ok_or_else(|| crate::i18n::tr("could not allocate frame"))
   }
 }
 
@@ -244,9 +244,10 @@ impl Decoder {
     unsafe {
       let codec = avcodec_find_decoder((*stream.codecpar).codec_id);
       if codec.is_null() {
-        return Err("no decoder for selected stream".into());
+        return Err(crate::i18n::tr("no decoder for selected stream"));
       }
-      let raw = NonNull::new(avcodec_alloc_context3(codec)).ok_or("could not allocate decoder")?;
+      let raw = NonNull::new(avcodec_alloc_context3(codec))
+        .ok_or_else(|| crate::i18n::tr("could not allocate decoder"))?;
       let decoder = Self {
         raw,
         index: stream.index,
@@ -320,7 +321,13 @@ impl ConvertVideo {
   ) -> Result<Video, String> {
     let (width, height) = (frame.width, frame.height);
     if !(1..=8192).contains(&width) || !(1..=8192).contains(&height) {
-      return Err(format!("unsupported video size {width}x{height}"));
+      return Err(crate::i18n::format(
+        "unsupported video size {width}x{height}",
+        &[
+          ("width", &width.to_string()),
+          ("height", &height.to_string()),
+        ],
+      ));
     }
     let mut pixels = vec![0; width as usize * height as usize * 4 + 64];
     let ratio = frame.sample_aspect_ratio;
@@ -345,7 +352,7 @@ impl ConvertVideo {
         ptr::null(),
       );
       if self.raw.is_null() {
-        return Err("could not configure video conversion".into());
+        return Err(crate::i18n::tr("could not configure video conversion"));
       }
       let output = [
         pixels.as_mut_ptr(),
@@ -635,7 +642,7 @@ impl Media {
           }
         });
     if video.is_none() && audio.is_none() {
-      return Err("no playable audio or video stream".into());
+      return Err(crate::i18n::tr("no playable audio or video stream"));
     }
     let start = unsafe { (*input.raw.as_ptr()).start_time };
     let start = if start == NO_PTS { 0 } else { start };

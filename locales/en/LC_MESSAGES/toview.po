@@ -1,0 +1,172 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: en\nPlural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Usage: toview [OPTIONS] [--] <video-file>"
+msgstr "Usage: toview [OPTIONS] [--] <video-file>"
+
+msgid "Close the window at the end of playback"
+msgstr "Close the window at the end of playback"
+
+msgid "Keep the window open (default)"
+msgstr "Keep the window open (default)"
+
+msgid "Show help"
+msgstr "Show help"
+
+msgid "Show version"
+msgstr "Show version"
+
+msgid "missing video file"
+msgstr "missing video file"
+
+msgid "unexpected extra argument"
+msgstr "unexpected extra argument"
+
+msgid "--close-on-end requires =0 or =1"
+msgstr "--close-on-end requires =0 or =1"
+
+msgid "unknown option {option}"
+msgstr "unknown option {option}"
+
+msgid "{path}: expected a regular video file"
+msgstr "{path}: expected a regular video file"
+
+msgid "{quit} - quit, Esc / {menu} - Menu (show/hide)"
+msgstr "{quit} - quit, Esc / {menu} - Menu (show/hide)"
+
+msgid "Ctrl+Left / Ctrl+Right - frame by frame"
+msgstr "Ctrl+Left / Ctrl+Right - frame by frame"
+
+msgid "Frame: {frame}"
+msgstr "Frame: {frame}"
+
+msgid "audio output unavailable: {error}"
+msgstr "audio output unavailable: {error}"
+
+msgid "audio server unavailable: {error}"
+msgstr "audio server unavailable: {error}"
+
+msgid "audio server disconnected: {error}"
+msgstr "audio server disconnected: {error}"
+
+msgid "media decoder exited"
+msgstr "media decoder exited"
+
+msgid "file contains no decodable video frames"
+msgstr "file contains no decodable video frames"
+
+msgid "no playable audio or video stream"
+msgstr "no playable audio or video stream"
+
+msgid "no decoder for selected stream"
+msgstr "no decoder for selected stream"
+
+msgid "could not allocate input context"
+msgstr "could not allocate input context"
+
+msgid "could not allocate packet"
+msgstr "could not allocate packet"
+
+msgid "could not allocate frame"
+msgstr "could not allocate frame"
+
+msgid "could not allocate decoder"
+msgstr "could not allocate decoder"
+
+msgid "could not configure video conversion"
+msgstr "could not configure video conversion"
+
+msgid "audio packet is too large"
+msgstr "audio packet is too large"
+
+msgid "invalid file path"
+msgstr "invalid file path"
+
+msgid "media decoder stopped unexpectedly"
+msgstr "media decoder stopped unexpectedly"
+
+msgid "open input"
+msgstr "open input"
+
+msgid "read stream information"
+msgstr "read stream information"
+
+msgid "seek input"
+msgstr "seek input"
+
+msgid "configure decoder"
+msgstr "configure decoder"
+
+msgid "open decoder"
+msgstr "open decoder"
+
+msgid "send packet"
+msgstr "send packet"
+
+msgid "decode frame"
+msgstr "decode frame"
+
+msgid "convert video frame"
+msgstr "convert video frame"
+
+msgid "copy channel layout"
+msgstr "copy channel layout"
+
+msgid "configure audio conversion"
+msgstr "configure audio conversion"
+
+msgid "initialize audio conversion"
+msgstr "initialize audio conversion"
+
+msgid "size audio buffer"
+msgstr "size audio buffer"
+
+msgid "convert audio samples"
+msgstr "convert audio samples"
+
+msgid "read media packet"
+msgstr "read media packet"
+
+msgid "read frames for stepping"
+msgstr "read frames for stepping"
+
+msgid "retain final video frame"
+msgstr "retain final video frame"
+
+msgid "__toview_language__"
+msgstr "en"
+
+msgid "start media decoder: {error}"
+msgstr "start media decoder: {error}"
+
+msgid "could not create {path}: {error}"
+msgstr "could not create {path}: {error}"
+
+msgid "could not save {path}: {error}"
+msgstr "could not save {path}: {error}"
+
+msgid "unsupported video size {width}x{height}"
+msgstr "unsupported video size {width}x{height}"
+
+msgid "load menu font: {error}"
+msgstr "load menu font: {error}"
+
+msgid "load fallback font: {error}"
+msgstr "load fallback font: {error}"
+
+msgid "invalid window title"
+msgstr "invalid window title"
+
+msgid "no local audio socket"
+msgstr "no local audio socket"
+
+msgid "connect to PulseAudio: {error}"
+msgstr "connect to PulseAudio: {error}"
+
+msgid "open PulseAudio stream: {error}"
+msgstr "open PulseAudio stream: {error}"
+
+msgid "{count} frame"
+msgid_plural "{count} frames"
+msgstr[0] "{count} frame"
+msgstr[1] "{count} frames"

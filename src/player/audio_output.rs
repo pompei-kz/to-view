@@ -32,7 +32,10 @@ impl Output {
     if !explicit_sdl && pulseaudio::socket_path_from_env().is_some_and(|path| path.exists()) {
       match Pulse::open() {
         Ok(output) => return Ok(Self::Server(output)),
-        Err(error) => eprintln!("toview: audio server unavailable: {error}"),
+        Err(error) => eprintln!(
+          "toview: {}",
+          crate::i18n::format("audio server unavailable: {error}", &[("error", &error)])
+        ),
       }
     }
     sdl::AudioDevice::open().map(Self::Sdl)
@@ -121,7 +124,8 @@ pub struct Pulse {
 
 impl Pulse {
   fn open() -> Result<Self, String> {
-    let path = pulseaudio::socket_path_from_env().ok_or("no local audio socket")?;
+    let path =
+      pulseaudio::socket_path_from_env().ok_or_else(|| crate::i18n::tr("no local audio socket"))?;
     let socket = UnixStream::connect(path).map_err(|error| error.to_string())?;
     socket
       .set_read_timeout(Some(Duration::from_secs(1)))
@@ -133,8 +137,12 @@ impl Pulse {
       .and_then(|path| fs::read(path).ok())
       .filter(|bytes| bytes.len() == 256)
       .unwrap_or_else(|| vec![0; 256]);
-    let client = Client::new_unix(c"toview", socket, Some(cookie))
-      .map_err(|error| format!("connect to PulseAudio: {error:?}"))?;
+    let client = Client::new_unix(c"toview", socket, Some(cookie)).map_err(|error| {
+      crate::i18n::format(
+        "connect to PulseAudio: {error}",
+        &[("error", &format!("{error:?}"))],
+      )
+    })?;
     let queue = Arc::new(Mutex::new(Queue::default()));
     let mut params = protocol::PlaybackStreamParams {
       sample_spec: protocol::SampleSpec {
@@ -151,7 +159,12 @@ impl Pulse {
     params.buffer_attr.minimum_request_length = (BYTES_PER_SECOND / 100) as u32;
     params.buffer_attr.pre_buffering = 0;
     let stream = block_on(client.create_playback_stream(params, Source(Arc::clone(&queue))))
-      .map_err(|error| format!("open PulseAudio stream: {error:?}"))?;
+      .map_err(|error| {
+        crate::i18n::format(
+          "open PulseAudio stream: {error}",
+          &[("error", &format!("{error:?}"))],
+        )
+      })?;
     Ok(Self {
       stream,
       _client: client,
@@ -245,7 +258,13 @@ impl Pulse {
 
   fn fail(&self, error: impl std::fmt::Display) {
     if !self.failed.replace(true) {
-      eprintln!("toview: audio server disconnected: {error}");
+      eprintln!(
+        "toview: {}",
+        crate::i18n::format(
+          "audio server disconnected: {error}",
+          &[("error", &error.to_string())]
+        )
+      );
       self.queue.lock().unwrap().bytes.clear();
     }
   }

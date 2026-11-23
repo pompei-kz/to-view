@@ -17,7 +17,7 @@ The player restores its window position and size across launches. After the wind
 Install Rust with Cargo, then install the build tools and X11 headers listed below. If the static X11 archives are missing, the build script can download and extract the X11 packages into the Cargo build directory without administrator privileges.
 
 ```sh
-sudo apt install build-essential binutils pkg-config curl xz-utils bzip2 clang libclang-dev \
+sudo apt install build-essential binutils pkg-config curl xz-utils bzip2 clang libclang-dev gettext \
   libx11-dev libxext-dev libxcb1-dev libxau-dev libxdmcp-dev x11proto-dev xtrans-dev
 cargo build --release
 ./target/release/toview /path/to/video/file.mp4
@@ -30,3 +30,9 @@ readelf -l -d target/release/toview
 ```
 
 The static binary has no `INTERP` program header or `NEEDED` entries. For paths that begin with a hyphen, use `toview -- -video.mp4`.
+
+## Translations
+
+The UI language is selected from `LC_ALL`, `LC_MESSAGES`, `LANG`, and the colon-separated `LANGUAGES` list, in that order. A locale must be installed and have a translation. If no candidate succeeds, the player uses Russian. Russian, English, and Kazakh catalogs are embedded in the executable. Short language names in `LANGUAGES` can select an installed catalog without a matching system locale.
+
+For other languages, install a GNU gettext catalog as `/usr/local/share/locale/<locale>/LC_MESSAGES/toview.mo` or `/usr/share/locale/<locale>/LC_MESSAGES/toview.mo`. Regional catalogs are tried before the base language. Add translations by creating a UTF-8 `.po` file based on `locales/en/LC_MESSAGES/toview.po`, then compile it with `msgfmt --check --check-format -o toview.mo toview.po`. The `gettext` build package provides `msgfmt`; it is not required to run the player.

@@ -63,15 +63,30 @@ impl Geometry {
       return;
     };
     if let Err(error) = fs::create_dir_all(&dir) {
-      eprintln!("toview: could not create {}: {error}", dir.display());
+      eprintln!(
+        "toview: {}",
+        crate::i18n::format(
+          "could not create {path}: {error}",
+          &[
+            ("path", &dir.display().to_string()),
+            ("error", &error.to_string())
+          ]
+        )
+      );
       return;
     }
     for (name, pair) in [("position.txt", self.position), ("size.txt", self.size)] {
       if let Some((first, second)) = pair {
         if let Err(error) = write_pair(&dir, name, first, second) {
           eprintln!(
-            "toview: could not save {}: {error}",
-            dir.join(name).display()
+            "toview: {}",
+            crate::i18n::format(
+              "could not save {path}: {error}",
+              &[
+                ("path", &dir.join(name).display().to_string()),
+                ("error", &error.to_string())
+              ]
+            )
           );
         }
       }

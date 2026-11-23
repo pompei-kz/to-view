@@ -77,6 +77,7 @@ pub struct Ui {
   menu_toggle_key: i32,
   menu_frame: Option<u64>,
   menu_font: fontdue::Font,
+  fallback_font: fontdue::Font,
   keyboard_layout: Option<super::keyboard_layout::KeyboardLayout>,
   video: *mut SDL_Texture,
   video_size: (i32, i32),
@@ -97,7 +98,7 @@ impl Ui {
       let (x, y) = geometry.position.unwrap_or((center, center));
       let (w, h) = geometry.size.unwrap_or((640, 480));
       let title = std::ffi::CString::new(format!("{file_name} - toview"))
-        .map_err(|_| "invalid window title")?;
+        .map_err(|_| crate::i18n::tr("invalid window title"))?;
       let window = SDL_CreateWindow(
         title.as_ptr(),
         x,
@@ -127,7 +128,12 @@ impl Ui {
         include_bytes!("../../assets/DejaVuSans.ttf") as &[u8],
         fontdue::FontSettings::default(),
       )
-      .map_err(|error| format!("load menu font: {error}"))?;
+      .map_err(|error| crate::i18n::format("load menu font: {error}", &[("error", error)]))?;
+      let fallback_font = fontdue::Font::from_bytes(
+        include_bytes!("../../assets/DroidSansFallbackFull.ttf") as &[u8],
+        fontdue::FontSettings::default(),
+      )
+      .map_err(|error| crate::i18n::format("load fallback font: {error}", &[("error", error)]))?;
       Ok(Self {
         window,
         renderer,
@@ -137,6 +143,7 @@ impl Ui {
         menu_toggle_key: -1,
         menu_frame: None,
         menu_font,
+        fallback_font,
         keyboard_layout: if CStr::from_ptr(SDL_GetCurrentVideoDriver()) == c"x11" {
           super::keyboard_layout::KeyboardLayout::open()
         } else {
@@ -458,11 +465,26 @@ impl Ui {
       .unwrap_or_else(|| "V".to_owned());
     let frame = frame.map_or_else(|| "-".to_owned(), |value| value.to_string());
     let text = format!(
-      "{label} - выход, Esc / {toggle_label} - Меню (показать/спрятать)\nCtrl+Left / Ctrl+Right - по кадрам\nКадр: {frame}"
+      "{}\n{}\n{}",
+      crate::i18n::format(
+        "{quit} - quit, Esc / {menu} - Menu (show/hide)",
+        &[("quit", &label), ("menu", &toggle_label)]
+      ),
+      crate::i18n::tr("Ctrl+Left / Ctrl+Right - frame by frame"),
+      crate::i18n::format("Frame: {frame}", &[("frame", &frame)]),
     );
     let mut layout = Layout::new(CoordinateSystem::PositiveYDown);
     layout.reset(&LayoutSettings::default());
-    layout.append(&[&self.menu_font], &TextStyle::new(&text, 18.0, 0));
+    let fonts = [&self.menu_font, &self.fallback_font];
+    for ch in text.chars() {
+      let mut buffer = [0; 4];
+      let value = ch.encode_utf8(&mut buffer);
+      let index = usize::from(
+        self.menu_font.lookup_glyph_index(ch) == 0
+          && self.fallback_font.lookup_glyph_index(ch) != 0,
+      );
+      layout.append(&fonts, &TextStyle::new(value, 18.0, index));
+    }
 
     let width = layout
       .glyphs()
@@ -483,7 +505,7 @@ impl Ui {
     }
     let mut mask = vec![0u8; width as usize * height as usize];
     for glyph in layout.glyphs() {
-      let (_, bitmap) = self.menu_font.rasterize_config(glyph.key);
+      let (_, bitmap) = fonts[glyph.font_index].rasterize_config(glyph.key);
       for row in 0..glyph.height {
         for col in 0..glyph.width {
           let x = glyph.x as i32 + col as i32 + 2;
@@ -628,8 +650,8 @@ impl AudioDevice {
   }
 
   pub fn queue(&self, samples: &[f32]) -> Result<(), String> {
-    let bytes =
-      u32::try_from(std::mem::size_of_val(samples)).map_err(|_| "audio packet is too large")?;
+    let bytes = u32::try_from(std::mem::size_of_val(samples))
+      .map_err(|_| crate::i18n::tr("audio packet is too large"))?;
     if unsafe { SDL_QueueAudio(self.id, samples.as_ptr().cast(), bytes) } != 0 {
       return Err(error());
     }

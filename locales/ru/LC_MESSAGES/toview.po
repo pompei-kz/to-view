@@ -1,0 +1,173 @@
+msgid ""
+msgstr "Content-Type: text/plain; charset=UTF-8\nLanguage: ru\nPlural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && n%10<=4 && (n%100<12 || n%100>14) ? 1 : 2);\n"
+
+msgid "Usage: toview [OPTIONS] [--] <video-file>"
+msgstr "Использование: toview [ПАРАМЕТРЫ] [--] <видеофайл>"
+
+msgid "Close the window at the end of playback"
+msgstr "Закрыть окно после окончания воспроизведения"
+
+msgid "Keep the window open (default)"
+msgstr "Оставить окно открытым (по умолчанию)"
+
+msgid "Show help"
+msgstr "Показать справку"
+
+msgid "Show version"
+msgstr "Показать версию"
+
+msgid "missing video file"
+msgstr "не указан видеофайл"
+
+msgid "unexpected extra argument"
+msgstr "лишний аргумент"
+
+msgid "--close-on-end requires =0 or =1"
+msgstr "для --close-on-end требуется =0 или =1"
+
+msgid "unknown option {option}"
+msgstr "неизвестный параметр {option}"
+
+msgid "{path}: expected a regular video file"
+msgstr "{path}: ожидается обычный видеофайл"
+
+msgid "{quit} - quit, Esc / {menu} - Menu (show/hide)"
+msgstr "{quit} - выход, Esc / {menu} - Меню (показать/спрятать)"
+
+msgid "Ctrl+Left / Ctrl+Right - frame by frame"
+msgstr "Ctrl+Left / Ctrl+Right - по кадрам"
+
+msgid "Frame: {frame}"
+msgstr "Кадр: {frame}"
+
+msgid "audio output unavailable: {error}"
+msgstr "аудиовыход недоступен: {error}"
+
+msgid "audio server unavailable: {error}"
+msgstr "аудиосервер недоступен: {error}"
+
+msgid "audio server disconnected: {error}"
+msgstr "аудиосервер отключён: {error}"
+
+msgid "media decoder exited"
+msgstr "декодер завершил работу"
+
+msgid "file contains no decodable video frames"
+msgstr "файл не содержит декодируемых видеокадров"
+
+msgid "no playable audio or video stream"
+msgstr "нет доступной аудио- или видеодорожки"
+
+msgid "no decoder for selected stream"
+msgstr "нет декодера для выбранной дорожки"
+
+msgid "could not allocate input context"
+msgstr "не удалось выделить контекст файла"
+
+msgid "could not allocate packet"
+msgstr "не удалось выделить пакет"
+
+msgid "could not allocate frame"
+msgstr "не удалось выделить кадр"
+
+msgid "could not allocate decoder"
+msgstr "не удалось выделить декодер"
+
+msgid "could not configure video conversion"
+msgstr "не удалось настроить преобразование видео"
+
+msgid "audio packet is too large"
+msgstr "аудиопакет слишком велик"
+
+msgid "invalid file path"
+msgstr "недопустимый путь к файлу"
+
+msgid "media decoder stopped unexpectedly"
+msgstr "декодер неожиданно остановился"
+
+msgid "open input"
+msgstr "открыть файл"
+
+msgid "read stream information"
+msgstr "прочитать информацию о дорожках"
+
+msgid "seek input"
+msgstr "перемотать файл"
+
+msgid "configure decoder"
+msgstr "настроить декодер"
+
+msgid "open decoder"
+msgstr "открыть декодер"
+
+msgid "send packet"
+msgstr "передать пакет"
+
+msgid "decode frame"
+msgstr "декодировать кадр"
+
+msgid "convert video frame"
+msgstr "преобразовать видеокадр"
+
+msgid "copy channel layout"
+msgstr "скопировать расположение каналов"
+
+msgid "configure audio conversion"
+msgstr "настроить преобразование звука"
+
+msgid "initialize audio conversion"
+msgstr "запустить преобразование звука"
+
+msgid "size audio buffer"
+msgstr "рассчитать аудиобуфер"
+
+msgid "convert audio samples"
+msgstr "преобразовать аудиосэмплы"
+
+msgid "read media packet"
+msgstr "прочитать медиапакет"
+
+msgid "read frames for stepping"
+msgstr "прочитать кадры для перехода"
+
+msgid "retain final video frame"
+msgstr "сохранить последний кадр"
+
+msgid "__toview_language__"
+msgstr "ru"
+
+msgid "start media decoder: {error}"
+msgstr "не удалось запустить декодер: {error}"
+
+msgid "could not create {path}: {error}"
+msgstr "не удалось создать {path}: {error}"
+
+msgid "could not save {path}: {error}"
+msgstr "не удалось сохранить {path}: {error}"
+
+msgid "unsupported video size {width}x{height}"
+msgstr "неподдерживаемый размер видео {width}x{height}"
+
+msgid "load menu font: {error}"
+msgstr "не удалось загрузить шрифт меню: {error}"
+
+msgid "load fallback font: {error}"
+msgstr "не удалось загрузить резервный шрифт: {error}"
+
+msgid "invalid window title"
+msgstr "недопустимый заголовок окна"
+
+msgid "no local audio socket"
+msgstr "локальный аудиосокет не найден"
+
+msgid "connect to PulseAudio: {error}"
+msgstr "не удалось подключиться к PulseAudio: {error}"
+
+msgid "open PulseAudio stream: {error}"
+msgstr "не удалось открыть поток PulseAudio: {error}"
+
+msgid "{count} frame"
+msgid_plural "{count} frames"
+msgstr[0] "{count} кадр"
+msgstr[1] "{count} кадра"
+msgstr[2] "{count} кадров"
