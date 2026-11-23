@@ -190,3 +190,6 @@ msgstr "{key} - дыбысты қосу"
 
 msgid "{key} - mute sound"
 msgstr "{key} - дыбысты өшіру"
+
+msgid "0 - reset picture"
+msgstr "0 - кескінді қалпына келтіру"

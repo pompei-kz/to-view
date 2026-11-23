@@ -267,6 +267,8 @@ impl Playback {
             _ => &mut self.settings.picture.saturation,
           };
           *field = (*field + step).clamp(-100, 100);
+        } else if scan == sdl::SCAN_0 {
+          self.settings.picture = settings::PictureSettings::default();
         } else if scan == sdl::SCAN_X || scan == sdl::SCAN_VOLUMEDOWN {
           self.settings.volume = (self.settings.volume - 25).max(0);
         } else if scan == sdl::SCAN_C || scan == sdl::SCAN_VOLUMEUP {
@@ -283,6 +285,7 @@ impl Playback {
         }
         if (sdl::SCAN_1..=sdl::SCAN_8).contains(&scan)
           || [
+            sdl::SCAN_0,
             sdl::SCAN_X,
             sdl::SCAN_C,
             sdl::SCAN_Z,

@@ -40,6 +40,7 @@ pub const SCAN_S: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_S;
 pub const SCAN_X: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_X;
 pub const SCAN_C: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_C;
 pub const SCAN_Z: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Z;
+pub const SCAN_0: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_0;
 pub const SCAN_1: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_1;
 pub const SCAN_8: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_8;
 pub const SCAN_VOLUMEUP: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_VOLUMEUP;
@@ -699,6 +700,7 @@ impl Ui {
         "Saturation: 7 - {value} + 8",
         &[("value", &picture.saturation.to_string())],
       ),
+      crate::i18n::tr("0 - reset picture"),
     ];
     let right = [
       crate::i18n::format(
@@ -721,7 +723,7 @@ impl Ui {
     let start_y = 95;
     let narrow = width < 700;
     let right_x = if narrow { 12 } else { width / 2 + 8 };
-    let right_y = if narrow { start_y + 4 * 25 } else { start_y };
+    let right_y = if narrow { start_y + 5 * 25 } else { start_y };
     let left_width = if narrow { width - 24 } else { width / 2 - 20 };
     for (i, line) in left.iter().enumerate() {
       let y = start_y + i as i32 * 25;

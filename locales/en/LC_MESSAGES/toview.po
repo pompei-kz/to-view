@@ -191,3 +191,6 @@ msgstr "{key} - enable sound"
 
 msgid "{key} - mute sound"
 msgstr "{key} - mute sound"
+
+msgid "0 - reset picture"
+msgstr "0 - reset picture"
