@@ -4,6 +4,8 @@ A minimal video player with a Rust playback engine. It uses FFmpeg for demuxing 
 
 The bundled FFmpeg build supports MP4/MOV, Matroska/WebM, AVI, and MPEG-TS. Common codecs include H.264, HEVC, AV1, VP8, VP9, AAC, and Opus.
 
+Scroll over the video to zoom around the pointer; hold the middle mouse button and drag to move the picture. Zoom ranges from 0.1× to 16× in 1.1× wheel steps. Zoom and position are saved immediately per file. Press Backspace to fit and center the video in the window. A single left click changes playback after the double-click interval; double-clicking toggles fullscreen without changing playback state.
+
 Right-click to toggle the menu. Left-click the video or the menu button to toggle playback. The seekbar appears at the bottom when the menu is open. Hover over it to preview a timestamp and left-click to jump there.
 
 While paused, Ctrl+Left and Ctrl+Right move one video frame backward or forward. The Left and Right arrow keys seek by 1 second. Hold Shift to seek by 5 seconds or Shift+Alt to seek by 30 seconds. At the boundaries, the arrow keys stop on the first or last frame. Home and End jump directly to the first and last frames, respectively, and pause playback.

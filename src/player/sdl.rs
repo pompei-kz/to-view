@@ -23,12 +23,19 @@ pub use super::ffi::{
 
 use super::ffi::{
   SDL_EventType_SDL_KEYDOWN as KEY_DOWN, SDL_EventType_SDL_KEYMAPCHANGED as KEYMAP_CHANGED,
-  SDL_EventType_SDL_MOUSEBUTTONDOWN as MOUSE_DOWN, SDL_EventType_SDL_MOUSEMOTION as MOUSE_MOTION,
+  SDL_EventType_SDL_MOUSEBUTTONDOWN as MOUSE_DOWN, SDL_EventType_SDL_MOUSEBUTTONUP as MOUSE_UP,
+  SDL_EventType_SDL_MOUSEMOTION as MOUSE_MOTION, SDL_EventType_SDL_MOUSEWHEEL as MOUSE_WHEEL,
   SDL_EventType_SDL_QUIT as QUIT, SDL_EventType_SDL_WINDOWEVENT as WINDOW_EVENT,
+  SDL_WindowEventID_SDL_WINDOWEVENT_FOCUS_LOST as FOCUS_LOST,
+  SDL_WindowEventID_SDL_WINDOWEVENT_HIDDEN as HIDDEN,
+  SDL_WindowEventID_SDL_WINDOWEVENT_MINIMIZED as MINIMIZED,
+  SDL_WindowEventID_SDL_WINDOWEVENT_RESIZED as RESIZED,
+  SDL_WindowEventID_SDL_WINDOWEVENT_SIZE_CHANGED as SIZE_CHANGED,
 };
 
 pub const LEFT_BUTTON: u8 = SDL_BUTTON_LEFT as u8;
 pub const RIGHT_BUTTON: u8 = SDL_BUTTON_RIGHT as u8;
+pub const MIDDLE_BUTTON: u8 = SDL_BUTTON_MIDDLE as u8;
 
 pub const SHIFT: u16 = SDL_Keymod_KMOD_SHIFT as u16;
 pub const CTRL: u16 = SDL_Keymod_KMOD_CTRL as u16;
@@ -36,6 +43,7 @@ pub const ALT: u16 = SDL_Keymod_KMOD_ALT as u16;
 pub const Q: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_Q;
 pub const F: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_F;
 pub const V: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_V;
+pub const SCAN_BACKSPACE: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_BACKSPACE;
 pub const SCAN_S: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_S;
 pub const SCAN_X: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_X;
 pub const SCAN_C: SDL_Scancode = SDL_Scancode_SDL_SCANCODE_C;
@@ -67,6 +75,20 @@ pub enum Event {
     button: u8,
     clicks: u8,
   },
+  MouseUp {
+    button: u8,
+  },
+  Motion {
+    x: i32,
+    y: i32,
+  },
+  Wheel {
+    x: i32,
+    y: i32,
+    delta: f64,
+  },
+  FocusLost,
+  Resized,
   Redraw,
 }
 
@@ -86,6 +108,7 @@ pub struct Ui {
   menu_key: i32,
   menu_toggle_key: i32,
   menu_frame: Option<u64>,
+  menu_fit_hint: bool,
   menu_font: fontdue::Font,
   fallback_font: fontdue::Font,
   keyboard_layout: Option<super::keyboard_layout::KeyboardLayout>,
@@ -152,6 +175,7 @@ impl Ui {
         menu_key: -1,
         menu_toggle_key: -1,
         menu_frame: None,
+        menu_fit_hint: false,
         menu_font,
         fallback_font,
         keyboard_layout: if CStr::from_ptr(SDL_GetCurrentVideoDriver()) == c"x11" {
@@ -303,19 +327,68 @@ impl Ui {
               clicks: button.clicks,
             });
           }
-          MOUSE_MOTION => return Some(Event::Redraw),
+          MOUSE_UP => {
+            return Some(Event::MouseUp {
+              button: event.button.button,
+            });
+          }
+          MOUSE_MOTION => {
+            return Some(Event::Motion {
+              x: event.motion.x,
+              y: event.motion.y,
+            });
+          }
+          MOUSE_WHEEL => {
+            let wheel = event.wheel;
+            let (x, y) = (wheel.mouseX, wheel.mouseY);
+            let mut delta = if wheel.preciseY != 0.0 {
+              f64::from(wheel.preciseY)
+            } else {
+              f64::from(wheel.y)
+            };
+            if wheel.direction == SDL_MouseWheelDirection_SDL_MOUSEWHEEL_FLIPPED {
+              delta = -delta;
+            }
+            return Some(Event::Wheel { x, y, delta });
+          }
           WINDOW_EVENT => {
             if event.window.event as u32 == SDL_WindowEventID_SDL_WINDOWEVENT_CLOSE {
               return Some(Event::Quit);
             }
             self.remember();
-            return Some(Event::Redraw);
+            match event.window.event as u32 {
+              FOCUS_LOST | HIDDEN | MINIMIZED => return Some(Event::FocusLost),
+              SIZE_CHANGED | RESIZED => return Some(Event::Resized),
+              _ => return Some(Event::Redraw),
+            }
           }
           _ => {}
         }
       }
     }
     None
+  }
+
+  pub fn capture_mouse(&self, capture: bool) {
+    unsafe {
+      SDL_CaptureMouse(if capture {
+        SDL_bool_SDL_TRUE
+      } else {
+        SDL_bool_SDL_FALSE
+      });
+    }
+  }
+
+  pub fn double_click_interval(&self) -> Duration {
+    unsafe {
+      let hint = SDL_GetHint(c"SDL_MOUSE_DOUBLE_CLICK_TIME".as_ptr());
+      if !hint.is_null() {
+        if let Ok(value) = CStr::from_ptr(hint).to_string_lossy().parse::<u64>() {
+          return Duration::from_millis(value.min(60_000));
+        }
+      }
+    }
+    Duration::from_millis(500)
   }
 
   pub fn fullscreen(&mut self) {
@@ -407,24 +480,27 @@ impl Ui {
     unsafe { SDL_RenderDrawLine(self.renderer, x, y, next_x, next_y) };
   }
 
-  pub fn background(&self, aspect: f64, rotation: f64) {
+  pub fn background(&self, aspect: f64, rotation: f64, view: super::view::ViewTransform) {
     self.clear();
     unsafe {
       if self.video.is_null() {
         return;
       }
-      let (width, height) = self.size();
-      let sideways =
-        rotation.abs().rem_euclid(180.0) > 45.0 && rotation.abs().rem_euclid(180.0) < 135.0;
-      let aspect = if sideways { 1.0 / aspect } else { aspect };
-      let w = width.min((height as f64 * aspect).round() as i32).max(1);
-      let h = height.min((width as f64 / aspect).round() as i32).max(1);
-      let (w, h) = if sideways { (h, w) } else { (w, h) };
+      let size = self.size();
+      let Some((fit_w, fit_h, sideways)) = super::view::fit(size, aspect, rotation) else {
+        return;
+      };
+      let (center_x, center_y) = view.center(size, (fit_w, fit_h));
+      let (w, h) = if sideways {
+        (fit_h * view.zoom, fit_w * view.zoom)
+      } else {
+        (fit_w * view.zoom, fit_h * view.zoom)
+      };
       let dst = Rect {
-        x: (width - w) / 2,
-        y: (height - h) / 2,
-        w,
-        h,
+        x: (center_x - w / 2.0).round() as i32,
+        y: (center_y - h / 2.0).round() as i32,
+        w: (w.round() as i32).max(1),
+        h: (h.round() as i32).max(1),
       };
       SDL_RenderCopyEx(
         self.renderer,
@@ -438,7 +514,7 @@ impl Ui {
     }
   }
 
-  pub fn menu(&mut self, frame: Option<u64>) {
+  pub fn menu(&mut self, frame: Option<u64>, fit_hint: bool) {
     let key = self
       .keyboard_layout
       .as_ref()
@@ -449,8 +525,12 @@ impl Ui {
       .as_ref()
       .and_then(|layout| layout.key(true))
       .unwrap_or_else(|| unsafe { SDL_GetKeyFromScancode(V) });
-    if self.menu_key != key || self.menu_toggle_key != toggle_key || self.menu_frame != frame {
-      self.update_menu(key, toggle_key, frame);
+    if self.menu_key != key
+      || self.menu_toggle_key != toggle_key
+      || self.menu_frame != frame
+      || self.menu_fit_hint != fit_hint
+    {
+      self.update_menu(key, toggle_key, frame, fit_hint);
     }
     let (width, _) = self.size();
     let (menu_w, menu_h) = self.menu_size;
@@ -467,7 +547,7 @@ impl Ui {
     unsafe { SDL_RenderCopy(self.renderer, self.menu, ptr::null(), &dst) };
   }
 
-  fn update_menu(&mut self, key: i32, toggle_key: i32, frame: Option<u64>) {
+  fn update_menu(&mut self, key: i32, toggle_key: i32, frame: Option<u64>, fit_hint: bool) {
     let label = char::from_u32(key as u32)
       .filter(|ch| !ch.is_control())
       .map(|ch| ch.to_uppercase().collect::<String>())
@@ -477,7 +557,7 @@ impl Ui {
       .map(|ch| ch.to_uppercase().collect::<String>())
       .unwrap_or_else(|| "V".to_owned());
     let frame = frame.map_or_else(|| "-".to_owned(), |value| value.to_string());
-    let text = format!(
+    let mut text = format!(
       "{}\n{}\n{}",
       crate::i18n::format(
         "{quit} - quit, Esc / {menu} - Menu (show/hide)",
@@ -486,6 +566,10 @@ impl Ui {
       crate::i18n::tr("Ctrl+Left / Ctrl+Right - frame by frame"),
       crate::i18n::format("Frame: {frame}", &[("frame", &frame)]),
     );
+    if fit_hint {
+      text.push('\n');
+      text.push_str(&crate::i18n::tr("Backspace - fit to window"));
+    }
     if let Some((texture, width, height)) = self.text_texture(&text) {
       unsafe {
         if !self.menu.is_null() {
@@ -497,6 +581,7 @@ impl Ui {
       self.menu_key = key;
       self.menu_toggle_key = toggle_key;
       self.menu_frame = frame.parse().ok();
+      self.menu_fit_hint = fit_hint;
     }
   }
 
@@ -720,7 +805,7 @@ impl Ui {
         &[("key", &zkey)],
       ),
     ];
-    let start_y = 95;
+    let start_y = if settings.view.zoom != 1.0 { 120 } else { 95 };
     let narrow = width < 700;
     let right_x = if narrow { 12 } else { width / 2 + 8 };
     let right_y = if narrow { start_y + 5 * 25 } else { start_y };

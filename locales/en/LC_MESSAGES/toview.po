@@ -194,3 +194,6 @@ msgstr "{key} - mute sound"
 
 msgid "0 - reset picture"
 msgstr "0 - reset picture"
+
+msgid "Backspace - fit to window"
+msgstr "Backspace - fit to window"

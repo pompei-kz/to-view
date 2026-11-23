@@ -14,11 +14,12 @@ pub struct PictureSettings {
   pub saturation: i32,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Debug)]
 pub struct Settings {
   pub picture: PictureSettings,
   pub volume: i32,
   pub muted: bool,
+  pub view: super::view::ViewTransform,
 }
 
 impl Default for Settings {
@@ -27,6 +28,7 @@ impl Default for Settings {
       picture: PictureSettings::default(),
       volume: 1000,
       muted: false,
+      view: super::view::ViewTransform::default(),
     }
   }
 }
@@ -91,6 +93,27 @@ impl Settings {
             result.volume = n
           }
         }
+        "zoom" => {
+          if let Ok(n) = value.parse::<f64>() {
+            if n.is_finite() && (0.1..=16.0).contains(&n) {
+              result.view.zoom = n;
+            }
+          }
+        }
+        "offset_x" => {
+          if let Ok(n) = value.parse::<f64>() {
+            if n.is_finite() && n.abs() <= 1_000_000.0 {
+              result.view.offset_x = n;
+            }
+          }
+        }
+        "offset_y" => {
+          if let Ok(n) = value.parse::<f64>() {
+            if n.is_finite() && n.abs() <= 1_000_000.0 {
+              result.view.offset_y = n;
+            }
+          }
+        }
         "muted" => match value {
           "true" => result.muted = true,
           "false" => result.muted = false,
@@ -119,13 +142,16 @@ impl Settings {
         .open(&temp)?;
       writeln!(
         file,
-        "brightness={}\ncontrast={}\ngamma={}\nsaturation={}\nvolume={}\nmuted={}",
+        "brightness={}\ncontrast={}\ngamma={}\nsaturation={}\nvolume={}\nmuted={}\nzoom={}\noffset_x={}\noffset_y={}",
         self.picture.brightness,
         self.picture.contrast,
         self.picture.gamma,
         self.picture.saturation,
         self.volume_text(),
-        self.muted
+        self.muted,
+        self.view.zoom,
+        self.view.offset_x,
+        self.view.offset_y
       )?;
       drop(file);
       fs::rename(&temp, dir.join("settings.txt"))

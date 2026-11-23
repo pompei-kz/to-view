@@ -6,6 +6,7 @@ mod platform;
 mod sdl;
 mod seekbar;
 mod settings;
+mod view;
 mod visualizer;
 
 use crate::window_geometry::Geometry;
@@ -115,6 +116,8 @@ struct Playback {
   media_path: PathBuf,
   displayed_video: Option<media::Video>,
   picture_dirty: bool,
+  drag_position: Option<(i32, i32)>,
+  pending_click: Option<Instant>,
   visualization: visualizer::Mode,
   samples: Vec<f32>,
 }
@@ -160,6 +163,8 @@ impl Playback {
       media_path,
       displayed_video: None,
       picture_dirty: false,
+      drag_position: None,
+      pending_click: None,
       visualization: visualizer::Mode::Video,
       samples: Vec::new(),
     }
@@ -176,6 +181,14 @@ impl Playback {
         if self.input(ui, event) {
           return Ok(());
         }
+      }
+      if self
+        .pending_click
+        .is_some_and(|deadline| Instant::now() >= deadline)
+      {
+        self.pending_click = None;
+        self.toggle_playback();
+        self.redraw = true;
       }
       ui.save_geometry_if_due();
       self.receive()?;
@@ -220,13 +233,14 @@ impl Playback {
           ui.background(
             self.aspect,
             self.metadata.as_ref().map_or(0.0, |media| media.rotation),
+            self.settings.view,
           );
         } else {
           ui.clear();
           visualizer::draw(ui, self.visualization, &self.samples);
         }
         if self.menu {
-          ui.menu(self.frame_number);
+          ui.menu(self.frame_number, self.settings.view.zoom != 1.0);
           ui.extended_menu(self.extended_menu, self.settings);
           seekbar::draw(
             ui,
@@ -269,6 +283,8 @@ impl Playback {
           *field = (*field + step).clamp(-100, 100);
         } else if scan == sdl::SCAN_0 {
           self.settings.picture = settings::PictureSettings::default();
+        } else if scan == sdl::SCAN_BACKSPACE {
+          self.settings.view = view::ViewTransform::default();
         } else if scan == sdl::SCAN_X || scan == sdl::SCAN_VOLUMEDOWN {
           self.settings.volume = (self.settings.volume - 25).max(0);
         } else if scan == sdl::SCAN_C || scan == sdl::SCAN_VOLUMEUP {
@@ -286,6 +302,7 @@ impl Playback {
         if (sdl::SCAN_1..=sdl::SCAN_8).contains(&scan)
           || [
             sdl::SCAN_0,
+            sdl::SCAN_BACKSPACE,
             sdl::SCAN_X,
             sdl::SCAN_C,
             sdl::SCAN_Z,
@@ -313,7 +330,10 @@ impl Playback {
         scan: sdl::F,
         repeat: false,
         ..
-      } => ui.fullscreen(),
+      } => {
+        self.pending_click = None;
+        ui.fullscreen();
+      }
       sdl::Event::Key { scan: sdl::F, .. } => {}
       sdl::Event::Key {
         code, mods, repeat, ..
@@ -381,19 +401,94 @@ impl Playback {
         clicks,
       } => {
         let (x, y) = ui.render_point(x, y);
-        if self.menu && ui.extended_button_hit(x, y) {
-          self.extended_menu = !self.extended_menu;
-        } else if self.menu && seekbar::is_button(ui, x, y) {
-          self.toggle_playback();
-        } else if self.menu
-          && let Some(fraction) = seekbar::fraction(ui, x, y)
-        {
-          self.seek_fraction(fraction);
+        let button = self.menu && seekbar::is_button(ui, x, y);
+        let expanded = self.menu && ui.extended_button_hit(x, y);
+        let fraction = if self.menu {
+          seekbar::fraction(ui, x, y)
         } else {
+          None
+        };
+        let content = !button && !expanded && fraction.is_none();
+        let is_double = content
+          && clicks % 2 == 0
+          && self
+            .pending_click
+            .is_some_and(|deadline| Instant::now() < deadline);
+        if self.pending_click.is_some() && !is_double {
+          self.pending_click = None;
           self.toggle_playback();
-          if clicks == 2 {
-            ui.fullscreen();
+        }
+        if expanded {
+          self.extended_menu = !self.extended_menu;
+        } else if button {
+          self.toggle_playback();
+        } else if let Some(fraction) = fraction {
+          self.seek_fraction(fraction);
+        } else if is_double {
+          self.pending_click = None;
+          ui.fullscreen();
+        } else {
+          self.pending_click = Some(Instant::now() + ui.double_click_interval());
+        }
+      }
+      sdl::Event::Mouse {
+        x,
+        y,
+        button: sdl::MIDDLE_BUTTON,
+        ..
+      } => {
+        if self.video_view_active() {
+          self.drag_position = Some(ui.render_point(x, y));
+          ui.capture_mouse(true);
+        }
+      }
+      sdl::Event::MouseUp {
+        button: sdl::MIDDLE_BUTTON,
+      } => {
+        self.drag_position = None;
+        ui.capture_mouse(false);
+      }
+      sdl::Event::Motion { x, y } => {
+        if let Some(old) = self.drag_position {
+          let next = ui.render_point(x, y);
+          self.drag_position = Some(next);
+          if self.video_view_active() {
+            if let Some((w, h, _)) = view::fit(ui.size(), self.aspect, self.rotation()) {
+              let before = self.settings.view;
+              self.settings.view.pan(
+                ui.size(),
+                (w, h),
+                (next.0.saturating_sub(old.0), next.1.saturating_sub(old.1)),
+              );
+              if before != self.settings.view {
+                self.save_settings();
+              }
+            }
           }
+        }
+      }
+      sdl::Event::Wheel { x, y, delta } => {
+        if self.video_view_active() {
+          if let Some((w, h, _)) = view::fit(ui.size(), self.aspect, self.rotation()) {
+            let before = self.settings.view;
+            self
+              .settings
+              .view
+              .zoom_at(ui.size(), (w, h), ui.render_point(x, y), delta);
+            if before != self.settings.view {
+              self.save_settings();
+            }
+          }
+        }
+      }
+      sdl::Event::FocusLost => {
+        self.drag_position = None;
+        self.pending_click = None;
+        ui.capture_mouse(false);
+      }
+      sdl::Event::Resized => {
+        if self.drag_position.is_some() {
+          self.drag_position = ui.mouse();
         }
       }
       sdl::Event::Mouse {
@@ -405,6 +500,14 @@ impl Playback {
       _ => {}
     }
     false
+  }
+
+  fn rotation(&self) -> f64 {
+    self.metadata.as_ref().map_or(0.0, |media| media.rotation)
+  }
+
+  fn video_view_active(&self) -> bool {
+    self.displayed_video.is_some() && self.visualization == visualizer::Mode::Video
   }
 
   fn save_settings(&self) {

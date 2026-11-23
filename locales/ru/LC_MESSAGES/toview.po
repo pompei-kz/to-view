@@ -195,3 +195,6 @@ msgstr "{key} - выключить звук"
 
 msgid "0 - reset picture"
 msgstr "0 - сбросить"
+
+msgid "Backspace - fit to window"
+msgstr "Backspace - вписать в окно"
